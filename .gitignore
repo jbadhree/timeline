@@ -1,0 +1,9 @@
+# Local handoff notes and private context.
+/initial_prompt.md
+/.local/
+
+# Local editor state.
+/.obsidian/
+
+# Rebuildable runtime index.
+/.tline/

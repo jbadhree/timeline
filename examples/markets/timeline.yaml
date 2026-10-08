@@ -1,0 +1,20 @@
+# Example Timeline root. Draft schema: field names and structure are proposals.
+version: 1
+name: markets
+
+types:
+  news:
+    folder: news
+    entry_timing: past # the event happened before it was entered
+    fields:
+      text: { type: string, required: true }
+      ticker: { type: string, required: true }
+
+  prediction:
+    folder: predictions
+    entry_timing: future # entered before the expected event
+    fields:
+      pred: { type: string, required: true }
+      ticker: { type: string, required: true }
+      explanation: { type: string, required: true }
+      beliefs: { type: list, items: string, required: false }
