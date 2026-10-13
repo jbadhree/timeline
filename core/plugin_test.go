@@ -1,0 +1,160 @@
+package core
+
+import (
+	"errors"
+	"strings"
+	"testing"
+)
+
+// decisionsPlugin is a small plugin like one a timeline might write: a
+// superseded decision must link to the decision that replaced it.
+type decisionsPlugin struct {
+	seen  *PluginInput // the input it was given, for inspection
+	extra []Diagnostic // diagnostics to return as well
+	err   error
+}
+
+func (decisionsPlugin) Name() string { return "decisions" }
+
+func (decisionsPlugin) Types() []TypeDef {
+	return []TypeDef{{Name: "decision", Timing: Past}}
+}
+
+func (p decisionsPlugin) Validate(in PluginInput) ([]Diagnostic, error) {
+	if p.seen != nil {
+		*p.seen = in
+	}
+	if p.err != nil {
+		return nil, p.err
+	}
+	replaced := map[string]bool{}
+	for _, l := range in.Links {
+		if l.Section == "Superseded by" && l.ToType == "decision" {
+			replaced[l.From] = true
+		}
+	}
+	diags := append([]Diagnostic{}, p.extra...)
+	for _, e := range in.Events {
+		if f, ok := e.Doc.Field(FieldStatus); ok && f.Value.Text == "superseded" && !replaced[e.Path] {
+			diags = append(diags, Diagnostic{Path: e.Path, Section: "Superseded by", Message: "a superseded decision must link to the decision that replaced it"})
+		}
+	}
+	return diags, nil
+}
+
+func pluginConfig() *Config {
+	cfg := testConfig()
+	cfg.Types = append(cfg.Types, TypeDef{Name: "decision", Folder: "decisions", Timing: Past,
+		Status: &StatusDef{Values: []string{"current", "superseded"}, Closed: []string{"superseded"}}})
+	return cfg
+}
+
+func decisionDoc(path, status string, sections ...Section) Document {
+	return Document{Path: path, Fields: []Field{
+		str("type", "decision"), stamp("timeline_at", "2026-10-01T00:00:00Z"), str("created_by", "a"), str("status", status),
+	}, Sections: sections}
+}
+
+func TestPluginAddsDiagnostics(t *testing.T) {
+	old := decisionDoc("decisions/old.md", "superseded")
+	linked := decisionDoc("decisions/older.md", "superseded", Section{Heading: "Superseded by",
+		Items: []ListItem{{Text: "[New](new.md)", Line: 12, Links: []Link{{Target: "new.md", Line: 12}}}},
+		Links: []Link{{Target: "new.md", Line: 12}}})
+	res := mustCheck(t, CheckInput{
+		Config:  pluginConfig(),
+		Docs:    []Document{old, linked, decisionDoc("decisions/new.md", "current")},
+		Now:     testNow,
+		Plugins: []Plugin{decisionsPlugin{}},
+	})
+	if len(res.Diagnostics) != 1 || res.Diagnostics[0].Path != "decisions/old.md" ||
+		!strings.Contains(res.Diagnostics[0].Message, "must link to the decision that replaced it") {
+		t.Fatalf("got %v", res.Diagnostics)
+	}
+	for _, e := range res.Events {
+		if e.Valid != (e.Path != "decisions/old.md") {
+			t.Errorf("%s valid = %v", e.Path, e.Valid)
+		}
+	}
+}
+
+func TestPluginSeesOnlyItsTypesAsFacts(t *testing.T) {
+	var seen PluginInput
+	why := Section{Heading: "Why", Body: "Because [of this](old.md).", Links: []Link{{Target: "old.md", Line: 9}}}
+	how := Section{Heading: "How",
+		Items: []ListItem{
+			{Text: "First", Line: 12},
+			{Text: "Second\nsee [goal](../goals/g.md) and [web](https://x.y)", Line: 13, Links: []Link{{Target: "../goals/g.md", Line: 13}, {Target: "https://x.y", Line: 13}}},
+		},
+		Links: []Link{{Target: "../goals/g.md", Line: 14}, {Target: "https://x.y", Line: 14}}, // continuation line
+	}
+	mustCheck(t, CheckInput{
+		Config: pluginConfig(),
+		Docs: []Document{
+			decisionDoc("decisions/old.md", "current"),
+			decisionDoc("decisions/new.md", "current", why, how),
+			fullGoal("goals/g.md"), stepTask,
+		},
+		Now:     testNow,
+		Plugins: []Plugin{decisionsPlugin{seen: &seen}},
+	})
+	if len(seen.Events) != 2 || seen.Events[0].Path != "decisions/new.md" || seen.Events[1].Path != "decisions/old.md" {
+		t.Fatalf("events = %+v", seen.Events)
+	}
+	if !seen.Events[0].Draft || seen.Events[0].Type.Name != "decision" || !seen.Now.Equal(testNow) {
+		t.Errorf("event facts = %+v, now %v", seen.Events[0], seen.Now)
+	}
+	want := []ResolvedLink{
+		{From: "decisions/new.md", Section: "Why", Item: -1, Line: 9, Target: "old.md", To: "decisions/old.md", ToType: "decision"},
+		{From: "decisions/new.md", Section: "How", Item: 1, Line: 14, Target: "../goals/g.md", To: "goals/g.md", ToType: "goal"},
+		{From: "decisions/new.md", Section: "How", Item: 1, Line: 14, Target: "https://x.y"},
+	}
+	if len(seen.Links) != len(want) {
+		t.Fatalf("links = %+v", seen.Links)
+	}
+	for i := range want {
+		if seen.Links[i] != want[i] {
+			t.Errorf("link %d = %+v, want %+v", i, seen.Links[i], want[i])
+		}
+	}
+}
+
+func TestPluginCannotJudgeOtherTypes(t *testing.T) {
+	res := mustCheck(t, CheckInput{
+		Config:  pluginConfig(),
+		Docs:    []Document{decisionDoc("decisions/d.md", "current"), fullGoal("goals/g.md"), stepTask},
+		Now:     testNow,
+		Plugins: []Plugin{decisionsPlugin{extra: []Diagnostic{{Path: "goals/g.md", Message: "I dislike this goal"}}}},
+	})
+	if len(res.Diagnostics) != 1 || res.Diagnostics[0].Path != "goals/g.md" ||
+		!strings.Contains(res.Diagnostics[0].Message, "plugin decisions reported a problem in a file that is not one of its types") {
+		t.Fatalf("got %v", res.Diagnostics)
+	}
+}
+
+func TestPluginFailures(t *testing.T) {
+	in := CheckInput{Config: pluginConfig(), Docs: []Document{decisionDoc("decisions/d.md", "current")}, Now: testNow}
+
+	boom := errors.New("boom")
+	in.Plugins = []Plugin{decisionsPlugin{err: boom}}
+	if _, err := Check(in); !errors.Is(err, boom) || !strings.Contains(err.Error(), "plugin decisions") {
+		t.Errorf("failing plugin: %v", err)
+	}
+
+	in.Plugins = []Plugin{decisionsPlugin{}, decisionsPlugin{}}
+	if _, err := Check(in); err == nil || !strings.Contains(err.Error(), "registered twice") {
+		t.Errorf("duplicate plugin: %v", err)
+	}
+}
+
+func TestPluginDiagnosticsRespectSelection(t *testing.T) {
+	res := mustCheck(t, CheckInput{
+		Config:   pluginConfig(),
+		Docs:     []Document{decisionDoc("decisions/a.md", "superseded"), decisionDoc("decisions/b.md", "superseded")},
+		Selected: []string{"decisions/b.md"},
+		Now:      testNow,
+		Plugins:  []Plugin{decisionsPlugin{}},
+	})
+	if len(res.Diagnostics) != 1 || res.Diagnostics[0].Path != "decisions/b.md" {
+		t.Fatalf("got %v", res.Diagnostics)
+	}
+}

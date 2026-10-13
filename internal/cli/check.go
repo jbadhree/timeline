@@ -143,14 +143,18 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		return usageError(stderr, "check: "+err.Error())
 	}
 
-	in := core.CheckInput{Config: cfg, Docs: docs, Selected: selected, Now: clock()}
-	res := core.Check(in)
-	if !*dryRun && res.Valid() {
+	in := core.CheckInput{Config: cfg, Docs: docs, Selected: selected, Now: clock(), Plugins: plugins()}
+	res, err := core.Check(in)
+	if err == nil && !*dryRun && res.Valid() {
 		// The entry time is read after validation, immediately before
 		// writing. Recheck against it, so a Future draft whose time passed
 		// during validation is not recorded.
 		in.Now = clock()
-		res = core.Check(in)
+		res, err = core.Check(in)
+	}
+	if err != nil {
+		diagnose(stderr, "%v", err)
+		return ExitFailure
 	}
 	out.Events, out.Diagnostics, out.Valid = res.Events, res.Diagnostics, res.Valid()
 	if *dryRun || !out.Valid {
@@ -176,6 +180,10 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 	out.Recorded = len(out.Stamped) > 0
 	return renderCheck(stdout, stderr, opts.JSON, out, "")
 }
+
+// plugins returns the plugins a check runs. None are registered yet; the
+// goals plugin and plugins named in timeline.yaml come with their own tasks.
+var plugins = func() []core.Plugin { return nil }
 
 // clock returns the current time at Timeline's whole-second precision.
 func clock() time.Time { return now().UTC().Truncate(time.Second) }

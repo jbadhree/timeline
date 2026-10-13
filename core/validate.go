@@ -20,6 +20,8 @@ type CheckInput struct {
 	Selected []string
 	// Now is the entry time a draft would receive if it were recorded now.
 	Now time.Time
+	// Plugins add rules after the core ones. See Plugin.
+	Plugins []Plugin
 }
 
 // EventResult summarizes one checked event file.
@@ -57,9 +59,10 @@ type validator struct {
 	diags  []Diagnostic
 }
 
-// Check validates every document and the rules that span the root. It never
-// assigns IDs or entry times and has no side effects.
-func Check(in CheckInput) CheckResult {
+// Check validates every document and the rules that span the root, then runs
+// each plugin's validator. It never assigns IDs or entry times and has no side
+// effects. An error means a plugin failed, not that an event is invalid.
+func Check(in CheckInput) (CheckResult, error) {
 	v := &validator{in: in, byPath: map[string]*event{}}
 	for i := range in.Docs {
 		d := &in.Docs[i]
@@ -82,8 +85,11 @@ func Check(in CheckInput) CheckResult {
 	v.checkGoalLinks()
 	v.checkCycles()
 	v.checkWhy()
+	if err := v.runPlugins(); err != nil {
+		return CheckResult{}, err
+	}
 
-	return v.result()
+	return v.result(), nil
 }
 
 func (v *validator) add(d Diagnostic) { v.diags = append(v.diags, d) }

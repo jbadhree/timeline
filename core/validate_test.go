@@ -83,7 +83,16 @@ func taskDoc(path string, sections ...Section) Document {
 
 func check(t *testing.T, docs ...Document) CheckResult {
 	t.Helper()
-	return Check(CheckInput{Config: testConfig(), Docs: docs, Now: testNow})
+	return mustCheck(t, CheckInput{Config: testConfig(), Docs: docs, Now: testNow})
+}
+
+func mustCheck(t *testing.T, in CheckInput) CheckResult {
+	t.Helper()
+	res, err := Check(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
 }
 
 // wantProblems asserts that each substring appears in some diagnostic for
@@ -295,7 +304,7 @@ func TestWrongTypeForFolderAndRequiredSections(t *testing.T) {
 }
 
 func TestSelectedLimitsReportingButNotRootWideRules(t *testing.T) {
-	res := Check(CheckInput{
+	res := mustCheck(t, CheckInput{
 		Config: testConfig(),
 		Docs: []Document{
 			fullGoal("goals/g.md", "[Task](../tasks/t.md)"),

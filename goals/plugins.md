@@ -54,6 +54,8 @@ A plugin has a name and provides any of:
 - **validate:** given the events of its types and their resolved links, return diagnostics;
 - **commands:** named subcommands, such as `goal tree`, given the same events and returning terminal or JSON output.
 
+In Go, these are small interfaces in `core/plugin.go`: every plugin implements `Plugin` (a name) and any of `TypeProvider`, `Validator`, and `CommandProvider`. A validator receives a `PluginInput`: the config, the events of the plugin's own types, every link in those events as a `ResolvedLink` (section, list item, line, target as written, and the event and type it resolves to), and the current time. It returns diagnostics, or an error if the plugin itself failed, which stops the check with exit 1. Plugin validation runs after the core rules, its diagnostics are merged, sorted, and limited to the selected files like any other, and a diagnostic for a file outside the plugin's types is reported as the plugin's mistake instead.
+
 Built-in plugins are Go packages compiled into `tline` that implement the core interface. External plugins are executables that speak a versioned JSON protocol: `tline` starts each once per command, sends the events and links on stdin with the current time, and reads diagnostics or output from stdout, with a timeout. They run only when the root's own `timeline.yaml` names them.
 
 ### Configuration

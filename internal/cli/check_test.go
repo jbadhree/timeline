@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jbadhree/timeline/core"
 )
 
 const testConfig = "version: 1\ntypes:\n  task: { folder: tasks }\n"
@@ -166,5 +169,50 @@ func TestCheckWaitsForTheLockThenReportsConflict(t *testing.T) {
 	// A dry run never takes the lock.
 	if code, _ := runJSON(t, "--root", root, "--json", "check", "--dry-run"); code != ExitOK {
 		t.Errorf("dry run blocked by the lock: exit %d", code)
+	}
+}
+
+// taskOwnerPlugin is a test plugin that rejects tasks owned by "Nobody", or
+// fails outright when broken is set.
+type taskOwnerPlugin struct{ broken bool }
+
+func (taskOwnerPlugin) Name() string          { return "owners" }
+func (taskOwnerPlugin) Types() []core.TypeDef { return []core.TypeDef{{Name: "task"}} }
+func (p taskOwnerPlugin) Validate(in core.PluginInput) ([]core.Diagnostic, error) {
+	if p.broken {
+		return nil, errors.New("plugin crashed")
+	}
+	var out []core.Diagnostic
+	for _, e := range in.Events {
+		if f, ok := e.Doc.Field("owner"); ok && f.Value.Text == "Nobody" {
+			out = append(out, core.Diagnostic{Path: e.Path, Line: f.Line, Field: "owner", Message: "every task needs a real owner"})
+		}
+	}
+	return out, nil
+}
+
+func usePlugins(t *testing.T, ps ...core.Plugin) {
+	t.Helper()
+	old := plugins
+	plugins = func() []core.Plugin { return ps }
+	t.Cleanup(func() { plugins = old })
+}
+
+func TestCheckRunsPlugins(t *testing.T) {
+	fixedEffects(t)
+	nobody := strings.Replace(draftTask, "owner: Ada", "owner: Nobody", 1)
+	root := writeRoot(t, map[string]string{"tasks/a.md": draftTask, "tasks/b.md": nobody})
+
+	usePlugins(t, taskOwnerPlugin{})
+	code, res := runJSON(t, "--root", root, "--json", "check")
+	if code != ExitValidation || len(res.Diagnostics) != 1 || res.Diagnostics[0].Path != "tasks/b.md" || len(res.Stamped) != 0 {
+		t.Fatalf("exit %d, %+v", code, res)
+	}
+
+	usePlugins(t, taskOwnerPlugin{broken: true})
+	var out, errOut bytes.Buffer
+	if code := Run(context.Background(), []string{"--root", root, "check", "--dry-run"}, &out, &errOut); code != ExitFailure ||
+		!strings.Contains(errOut.String(), "plugin owners: plugin crashed") {
+		t.Fatalf("broken plugin: exit %d, stderr %q", code, errOut.String())
 	}
 }
