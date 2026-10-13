@@ -39,7 +39,7 @@ Goals and tasks are ordinary events with a fixed shape, so their views read the 
 
 ### The two types
 
-Both types come from the built-in goals [plugin](plugins.md). Until the plugin interface exists, their rules are compiled into the core; moving them changes where the rules live, not what they check.
+Both types come from the built-in goals [plugin](plugins.md) in `internal/plugins/goals`. The core knows nothing about them: it checks their fields, statuses, and timing from the plugin's type templates, and the plugin adds every rule below from the facts the core gives it.
 
 A goal is something we intend to achieve by a date. A task is work whose result is obvious: we know when it is done, and it needs no explanation. "List the files in a folder: run `ls`" is a task, not a goal. Both use the Future rule.
 

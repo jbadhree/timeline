@@ -11,7 +11,7 @@ import (
 
 // CheckInput is everything a dry-run check needs. Docs must include every
 // event file under the configured folders, because some rules (duplicate IDs,
-// goal links, inherited why) depend on the whole root.
+// links) depend on the whole root.
 type CheckInput struct {
 	Config *Config
 	Docs   []Document
@@ -44,12 +44,10 @@ func (r *CheckResult) Valid() bool { return len(r.Diagnostics) == 0 }
 
 // event is the validator's working state for one document.
 type event struct {
-	doc      *Document
-	typ      *TypeDef
-	id       string
-	draft    bool
-	children []*event // goal steps that are goals or tasks
-	parents  []*event
+	doc   *Document
+	typ   *TypeDef
+	id    string
+	draft bool
 }
 
 type validator struct {
@@ -82,9 +80,6 @@ func Check(in CheckInput) (CheckResult, error) {
 	}
 	v.checkDuplicateIDs()
 	v.checkLinks()
-	v.checkGoalLinks()
-	v.checkCycles()
-	v.checkWhy()
 	if err := v.runPlugins(); err != nil {
 		return CheckResult{}, err
 	}
@@ -198,14 +193,6 @@ func (v *validator) checkEvent(e *event) {
 		}
 	}
 
-	switch e.typ.Builtin {
-	case GoalType:
-		v.requireItems(p, d, SectionHow, "must list at least one step")
-		v.requireItems(p, d, SectionDoneWhen, "must list at least one criterion")
-		v.requireBody(p, d, SectionWhyItWillWork)
-	case TaskType:
-		v.requireItems(p, d, SectionHow, "must list at least one step")
-	}
 }
 
 // recordedMetadata checks id, entered_at, and entry_timing. They are written
@@ -363,28 +350,6 @@ func kindName(k ValueKind) string {
 	return "an unknown value"
 }
 
-func (v *validator) requireItems(p string, d *Document, heading, msg string) {
-	s, ok := d.Section(heading)
-	if !ok {
-		v.add(Diagnostic{Path: p, Section: heading, Message: "is required"})
-		return
-	}
-	if len(s.Items) == 0 {
-		v.add(Diagnostic{Path: p, Line: s.Line, Section: heading, Message: msg + " as a Markdown list item"})
-	}
-}
-
-func (v *validator) requireBody(p string, d *Document, heading string) {
-	s, ok := d.Section(heading)
-	if !ok {
-		v.add(Diagnostic{Path: p, Section: heading, Message: "is required"})
-		return
-	}
-	if strings.TrimSpace(s.Body) == "" {
-		v.add(Diagnostic{Path: p, Line: s.Line, Section: heading, Message: "must not be empty"})
-	}
-}
-
 func (v *validator) checkDuplicateIDs() {
 	byID := map[string][]*event{}
 	for _, e := range v.events {
@@ -409,7 +374,7 @@ func (v *validator) checkDuplicateIDs() {
 	}
 }
 
-// linkResult says what a link in a goal or task points to.
+// linkResult says what a link points to.
 type linkResult int
 
 const (
@@ -463,121 +428,6 @@ func (v *validator) checkLinks() {
 					v.add(Diagnostic{Path: e.doc.Path, Line: l.Line, Section: s.Heading, Message: fmt.Sprintf("link %q does not resolve to an event (looked for %s)", l.Target, path.Clean(path.Join(path.Dir(e.doc.Path), t)))})
 				}
 			}
-		}
-	}
-}
-
-func (v *validator) checkGoalLinks() {
-	for _, e := range v.events {
-		switch e.typ.Builtin {
-		case GoalType:
-			if s, ok := e.doc.Section(SectionHow); ok {
-				for _, item := range s.Items {
-					v.goalStep(e, item)
-				}
-			}
-		case TaskType:
-			if s, ok := e.doc.Section(SectionHow); ok {
-				for _, item := range s.Items {
-					for _, l := range item.Links {
-						if t, r := v.resolveLink(e, l); r == linkEvent && t.typ.Builtin != NotBuiltin {
-							v.add(Diagnostic{Path: e.doc.Path, Line: l.Line, Section: SectionHow, Message: fmt.Sprintf("a task's steps must not link to a %s (%s); make this task a goal instead", t.typ.Name, t.doc.Path)})
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
-// goalStep records the goals and tasks one step of a goal links to. Every
-// step must link to at least one, so that all work under a goal is tracked.
-func (v *validator) goalStep(e *event, item ListItem) {
-	linked, missing := false, false
-	for _, l := range item.Links {
-		t, r := v.resolveLink(e, l)
-		switch {
-		case r == linkMissing:
-			missing = true
-		case r == linkEvent && t.typ.Builtin != NotBuiltin:
-			linked = true
-			e.children = append(e.children, t)
-			t.parents = append(t.parents, e)
-		}
-	}
-	if !linked && !missing {
-		v.add(Diagnostic{Path: e.doc.Path, Line: item.Line, Section: SectionHow, Message: fmt.Sprintf("step %q must link to a goal or task", firstLine(item.Text))})
-	}
-}
-
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[:i]
-	}
-	if len(s) > 60 {
-		s = s[:57] + "..."
-	}
-	return s
-}
-
-// checkCycles reports goals whose child links lead back to themselves.
-func (v *validator) checkCycles() {
-	const (
-		unvisited = iota
-		active
-		done
-	)
-	state := map[*event]int{}
-	var stack []*event
-	reported := map[string]bool{}
-	var visit func(e *event)
-	visit = func(e *event) {
-		state[e] = active
-		stack = append(stack, e)
-		for _, c := range e.children {
-			switch state[c] {
-			case unvisited:
-				visit(c)
-			case active:
-				// The cycle is the part of the stack from c onward.
-				var cycle []string
-				for i := len(stack) - 1; i >= 0; i-- {
-					cycle = append([]string{stack[i].doc.Path}, cycle...)
-					if stack[i] == c {
-						break
-					}
-				}
-				key := strings.Join(cycle, " -> ")
-				if !reported[key] {
-					reported[key] = true
-					for _, p := range cycle {
-						v.add(Diagnostic{Path: p, Section: SectionHow, Message: "goal steps form a cycle: " + key + " -> " + c.doc.Path})
-					}
-				}
-			}
-		}
-		stack = stack[:len(stack)-1]
-		state[e] = done
-	}
-	for _, e := range v.events {
-		if e.typ.Builtin == GoalType && state[e] == unvisited {
-			visit(e)
-		}
-	}
-}
-
-// checkWhy requires a Why section for goals and tasks that no goal links to.
-func (v *validator) checkWhy() {
-	for _, e := range v.events {
-		if e.typ.Builtin == NotBuiltin || e.doc.ParseErr != nil {
-			continue
-		}
-		s, ok := e.doc.Section(SectionWhy)
-		switch {
-		case ok && strings.TrimSpace(s.Body) == "":
-			v.add(Diagnostic{Path: e.doc.Path, Line: s.Line, Section: SectionWhy, Message: "must not be empty"})
-		case !ok && len(e.parents) == 0:
-			v.add(Diagnostic{Path: e.doc.Path, Section: SectionWhy, Message: fmt.Sprintf("is required because no goal links to this %s from its How section", e.typ.Name)})
 		}
 	}
 }

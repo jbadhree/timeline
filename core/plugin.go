@@ -81,6 +81,9 @@ type ResolvedLink struct {
 	// folders, and links that do not resolve.
 	To     string
 	ToType string
+	// Broken is true when the link points into a configured folder but no
+	// event file is there. The core has already reported it.
+	Broken bool
 }
 
 // pluginTypes returns the names of the types a plugin provides.
@@ -145,8 +148,11 @@ func (v *validator) linksOf(e *event) []ResolvedLink {
 	for _, s := range e.doc.Sections {
 		for _, l := range s.Links {
 			rl := ResolvedLink{From: e.doc.Path, Section: s.Heading, Item: itemIndex(s, l), Line: l.Line, Target: l.Target}
-			if t, r := v.resolveLink(e, l); r == linkEvent {
+			switch t, r := v.resolveLink(e, l); r {
+			case linkEvent:
 				rl.To, rl.ToType = t.doc.Path, t.typ.Name
+			case linkMissing:
+				rl.Broken = true
 			}
 			out = append(out, rl)
 		}

@@ -7,13 +7,21 @@ import (
 )
 
 // The tests build documents directly; internal/document tests cover parsing.
+// The goal and task types here are plain configured types: their rules live
+// in the goals plugin, whose tests are in internal/plugins/goals.
 
 var testNow = time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
 
 func testConfig() *Config {
 	return &Config{Version: 1, Name: "test", Types: []TypeDef{
-		NewBuiltinType(GoalType, "goals", nil, nil),
-		NewBuiltinType(TaskType, "tasks", nil, nil),
+		{Name: "goal", Folder: "goals", Timing: Future, Fields: []FieldDef{
+			{Name: "goal", Kind: KindString, Required: true, NonEmpty: true},
+			{Name: "owner", Kind: KindString, Required: true, NonEmpty: true},
+		}, Status: &StatusDef{Values: []string{"open", "achieved"}, Closed: []string{"achieved"}}},
+		{Name: "task", Folder: "tasks", Timing: Future, Fields: []FieldDef{
+			{Name: "task", Kind: KindString, Required: true, NonEmpty: true},
+			{Name: "owner", Kind: KindString, Required: true, NonEmpty: true},
+		}, Status: &StatusDef{Values: []string{"open", "done"}, Closed: []string{"done"}}},
 		{Name: "news", Folder: "news", Timing: Past, Fields: []FieldDef{
 			{Name: "ticker", Kind: KindString, Required: true},
 			{Name: "score", Kind: KindNumber},
@@ -118,56 +126,6 @@ func wantProblems(t *testing.T, res CheckResult, path string, substrs ...string)
 	}
 }
 
-func TestCompleteGoalAndTaskAreValid(t *testing.T) {
-	res := check(t,
-		fullGoal("goals/g.md", "[List files](../tasks/t.md)"),
-		taskDoc("tasks/t.md", items("How", "Run `ls`.")), // why inherited from goals/g.md
-	)
-	wantProblems(t, res, "")
-	if len(res.Events) != 2 || !res.Events[0].Draft || !res.Events[0].Valid {
-		t.Errorf("events = %+v", res.Events)
-	}
-}
-
-func TestGoalMissingAnswers(t *testing.T) {
-	d := goalDoc("goals/g.md", items("How"), prose("Why it will work", "  "))
-	d.Fields = d.Fields[:3] // drop goal, owner, status
-	wantProblems(t, check(t, d), "goals/g.md",
-		`field "goal": is required`,
-		`field "owner": is required`,
-		`field "status": is required`,
-		`section "How": must list at least one step`,
-		`section "Done when": is required`,
-		`section "Why it will work": must not be empty`,
-		`section "Why": is required because no goal links`,
-	)
-}
-
-func TestTaskRules(t *testing.T) {
-	res := check(t,
-		fullGoal("goals/g.md"), stepTask,
-		taskDoc("tasks/t.md", prose("Why", "Needed."), items("How", "See [goal](../goals/g.md)")),
-		taskDoc("tasks/u.md", items("How", "Run it.")),
-	)
-	var forT, forU []string
-	for _, d := range res.Diagnostics {
-		switch d.Path {
-		case "tasks/t.md":
-			forT = append(forT, d.Message)
-		case "tasks/u.md":
-			forU = append(forU, d.Message)
-		default:
-			t.Errorf("unexpected: %s", d)
-		}
-	}
-	if len(forT) != 1 || !strings.Contains(forT[0], "must not link to a goal") {
-		t.Errorf("tasks/t.md: %v", forT)
-	}
-	if len(forU) != 1 || !strings.Contains(forU[0], "no goal links to this task") {
-		t.Errorf("tasks/u.md: %v", forU)
-	}
-}
-
 func TestGoalLinks(t *testing.T) {
 	g := fullGoal("goals/g.md", "[Missing](missing.md)")
 	g.Sections[2] = items("Done when", "[Outside](../README.md)", "[Web](https://example.com)", "[Anchor](#why)", "[Gone](../tasks/gone.md)")
@@ -180,41 +138,6 @@ func TestGoalLinks(t *testing.T) {
 	// Done when to files outside the folders, URLs, and anchors are fine.
 	if len(res.Diagnostics) != 2 {
 		t.Errorf("got %v", res.Diagnostics)
-	}
-}
-
-func TestGoalStepsMustLinkToGoalOrTask(t *testing.T) {
-	news := Document{Path: "news/n.md", Fields: []Field{
-		str("type", "news"), stamp("timeline_at", "2026-10-01T13:00:00Z"), str("created_by", "a"), str("ticker", "X"),
-	}}
-	res := check(t, news, stepTask, fullGoal("goals/g.md",
-		"Start with [the step](../tasks/step.md) first", // text around a link is fine
-		"Plain text with no link",
-		"[Background reading](https://example.com)",
-		"[A news event](../news/n.md)",
-	))
-	wantProblems(t, res, "goals/g.md",
-		`step "Plain text with no link" must link to a goal or task`,
-		`step "[Background reading](https://example.com)" must link to a goal or task`,
-		`step "[A news event](../news/n.md)" must link to a goal or task`,
-	)
-	if len(res.Diagnostics) != 3 {
-		t.Errorf("got %v", res.Diagnostics)
-	}
-}
-
-func TestGoalCycle(t *testing.T) {
-	res := check(t,
-		fullGoal("goals/a.md", "[B](b.md)"),
-		fullGoal("goals/b.md", "[A](a.md#how)"),
-	)
-	if len(res.Diagnostics) != 2 {
-		t.Fatalf("want one cycle diagnostic per goal, got %v", res.Diagnostics)
-	}
-	for _, d := range res.Diagnostics {
-		if !strings.Contains(d.Message, "cycle") {
-			t.Errorf("unexpected: %s", d)
-		}
 	}
 }
 
@@ -304,18 +227,36 @@ func TestWrongTypeForFolderAndRequiredSections(t *testing.T) {
 }
 
 func TestSelectedLimitsReportingButNotRootWideRules(t *testing.T) {
+	broken := taskDoc("tasks/broken.md")
+	broken.Fields = broken.Fields[:4] // no owner, no status
+	dup := func(path string) Document {
+		d := taskDoc(path)
+		d.Fields = append([]Field{str("id", "01M3VW7KR0FFWVGBE1D5GYN31R"), stamp("entered_at", "2026-10-01T14:00:00Z"), str("entry_timing", "future")}, d.Fields...)
+		return d
+	}
 	res := mustCheck(t, CheckInput{
-		Config: testConfig(),
-		Docs: []Document{
-			fullGoal("goals/g.md", "[Task](../tasks/t.md)"),
-			taskDoc("tasks/t.md", items("How", "Run it.")),
-			taskDoc("tasks/broken.md"),
-		},
+		Config:   testConfig(),
+		Docs:     []Document{taskDoc("tasks/t.md"), broken, dup("tasks/x.md"), dup("tasks/y.md")},
+		Selected: []string{"tasks/t.md", "tasks/x.md"},
+		Now:      testNow,
+	})
+	// tasks/broken.md has problems but is not selected; the duplicate ID in
+	// tasks/x.md is found through the unselected tasks/y.md.
+	if len(res.Diagnostics) != 1 || res.Diagnostics[0].Path != "tasks/x.md" || !strings.Contains(res.Diagnostics[0].Message, "also used by tasks/y.md") {
+		t.Fatalf("got %+v", res.Diagnostics)
+	}
+	if len(res.Events) != 2 {
+		t.Errorf("events = %+v", res.Events)
+	}
+}
+
+func TestSelectedNothingElse(t *testing.T) {
+	res := mustCheck(t, CheckInput{
+		Config:   testConfig(),
+		Docs:     []Document{taskDoc("tasks/t.md"), taskDoc("tasks/u.md")},
 		Selected: []string{"tasks/t.md"},
 		Now:      testNow,
 	})
-	// tasks/t.md inherits its why from an unselected goal and is valid;
-	// tasks/broken.md has problems but is not selected.
 	if len(res.Diagnostics) != 0 || len(res.Events) != 1 || res.Events[0].Path != "tasks/t.md" {
 		t.Errorf("got %+v", res)
 	}

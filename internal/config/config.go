@@ -2,7 +2,7 @@
 // validated core.Config.
 //
 // Decoding is strict: unknown keys, wrong value types, conflicting folders,
-// and redefined shared or built-in fields are errors, reported together as
+// and redefined shared or plugin-template fields are errors, reported together as
 // core.Diagnostics. Root discovery never falls back to another root after a
 // configuration error, and never creates configuration.
 //
@@ -78,17 +78,40 @@ func (e *Error) Error() string {
 }
 
 // Load reads and decodes root/timeline.yaml. An invalid file returns *Error.
-func Load(root string) (*core.Config, error) {
+// plugins provide type templates; see Decode.
+func Load(root string, plugins []core.Plugin) (*core.Config, error) {
 	data, err := os.ReadFile(filepath.Join(root, FileName))
 	if err != nil {
 		return nil, err
 	}
-	return Decode(data)
+	return Decode(data, plugins)
 }
 
 // Decode decodes timeline.yaml content. An invalid file returns *Error.
-func Decode(data []byte) (*core.Config, error) {
-	d := &decoder{}
+//
+// A type whose name matches a type provided by one of plugins is built from
+// that plugin's template: the configuration chooses its folder and may add
+// fields and sections, but cannot set its timing, status, or the template's
+// own fields.
+func Decode(data []byte, plugins []core.Plugin) (*core.Config, error) {
+	d := &decoder{templates: map[string]core.TypeDef{}}
+	for _, p := range plugins {
+		tp, ok := p.(core.TypeProvider)
+		if !ok {
+			continue
+		}
+		for _, t := range tp.Types() {
+			switch prev, dup := d.templates[t.Name]; {
+			case dup:
+				d.errf(nil, "type %q is provided by both plugin %s and plugin %s", t.Name, prev.Plugin, p.Name())
+			case !validName(t.Name) || !t.Timing.Valid():
+				d.errf(nil, "plugin %s provides type %q without a valid name and timing rule", p.Name(), t.Name)
+			default:
+				t.Plugin = p.Name()
+				d.templates[t.Name] = t
+			}
+		}
+	}
 	cfg := d.decode(data)
 	if len(d.diags) > 0 {
 		core.SortDiagnostics(d.diags)
@@ -98,7 +121,8 @@ func Decode(data []byte) (*core.Config, error) {
 }
 
 type decoder struct {
-	diags []core.Diagnostic
+	diags     []core.Diagnostic
+	templates map[string]core.TypeDef // plugin types by name
 }
 
 func (d *decoder) errf(n *yaml.Node, format string, args ...any) {
@@ -216,9 +240,9 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 		d.errf(k, "type name %q must use lowercase letters, digits, and underscores", name)
 		return core.TypeDef{}, false
 	}
-	builtin := core.IsBuiltinName(name)
+	template, fromPlugin := d.templates[name]
 	allowed := []string{"folder", "entry_timing", "max_delay", "fields", "sections", "status"}
-	if builtin {
+	if fromPlugin {
 		allowed = []string{"folder", "fields", "sections"}
 	}
 	before := len(d.diags)
@@ -268,7 +292,7 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 	if !hasKey["folder"] {
 		d.errf(v, "%s: folder is required", what)
 	}
-	if !builtin {
+	if !fromPlugin {
 		switch {
 		case !hasKey["entry_timing"]:
 			d.errf(v, "%s: entry_timing is required", what)
@@ -279,13 +303,24 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 		}
 	}
 	if fieldsNode != nil {
-		fields = d.decodeFields(fieldsNode, what, name, builtin, status != nil)
+		var reserved []string
+		if fromPlugin {
+			reserved = append(reserved, core.FieldStatus)
+			for _, f := range template.Fields {
+				reserved = append(reserved, f.Name)
+			}
+		}
+		fields = d.decodeFields(fieldsNode, what, template.Plugin, reserved, status != nil)
 	}
 	if len(d.diags) > before {
 		return core.TypeDef{}, false
 	}
-	if builtin {
-		return core.NewBuiltinType(core.Builtin(name), folder, fields, sections), true
+	if fromPlugin {
+		t := template
+		t.Folder = folder
+		t.Fields = append(append([]core.FieldDef{}, template.Fields...), fields...)
+		t.Sections = append(append([]string{}, template.Sections...), sections...)
+		return t, true
 	}
 	return core.TypeDef{
 		Name: name, Folder: folder, Timing: timing, MaxDelay: maxDelay,
@@ -331,7 +366,9 @@ func (d *decoder) decodeStatus(n *yaml.Node, what string) *core.StatusDef {
 	return st
 }
 
-func (d *decoder) decodeFields(n *yaml.Node, what, typeName string, builtin, hasStatus bool) []core.FieldDef {
+// decodeFields decodes a type's fields. reserved lists the fields of a plugin
+// template, which the configuration cannot redefine.
+func (d *decoder) decodeFields(n *yaml.Node, what, plugin string, reserved []string, hasStatus bool) []core.FieldDef {
 	var out []core.FieldDef
 	for _, kv := range d.pairs(n, what+": fields") {
 		k, v := kv[0], kv[1]
@@ -344,8 +381,8 @@ func (d *decoder) decodeFields(n *yaml.Node, what, typeName string, builtin, has
 		case core.IsSharedField(name):
 			d.errf(k, "%s: cannot redefine the shared field %q", what, name)
 			continue
-		case builtin && contains(core.BuiltinFieldNames(core.Builtin(typeName)), name):
-			d.errf(k, "%s: cannot redefine the built-in field %q", what, name)
+		case contains(reserved, name):
+			d.errf(k, "%s: cannot redefine the field %q from plugin %s", what, name, plugin)
 			continue
 		case name == core.FieldStatus && hasStatus:
 			d.errf(k, "%s: status is defined by the type's status setting", what)

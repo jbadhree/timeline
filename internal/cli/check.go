@@ -17,6 +17,7 @@ import (
 	"github.com/jbadhree/timeline/internal/config"
 	"github.com/jbadhree/timeline/internal/document"
 	"github.com/jbadhree/timeline/internal/lock"
+	"github.com/jbadhree/timeline/internal/plugins/goals"
 )
 
 // Effects that tests replace.
@@ -122,7 +123,7 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		}()
 	}
 
-	cfg, err := config.Load(root)
+	cfg, err := config.Load(root, plugins())
 	if err != nil {
 		var cerr *config.Error
 		if !errors.As(err, &cerr) {
@@ -181,9 +182,11 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 	return renderCheck(stdout, stderr, opts.JSON, out, "")
 }
 
-// plugins returns the plugins a check runs. None are registered yet; the
-// goals plugin and plugins named in timeline.yaml come with their own tasks.
-var plugins = func() []core.Plugin { return nil }
+// plugins returns the plugins tline runs: the built-in goals plugin. Plugins
+// named in timeline.yaml come with the plugin configuration task.
+var plugins = builtinPlugins
+
+func builtinPlugins() []core.Plugin { return []core.Plugin{goals.New()} }
 
 // clock returns the current time at Timeline's whole-second precision.
 func clock() time.Time { return now().UTC().Truncate(time.Second) }

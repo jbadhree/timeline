@@ -47,7 +47,9 @@ Validation, stamping, queries, and goal and task views live in a reusable core. 
 | `internal/cli/` | Arguments, terminal and JSON rendering, exit-code mapping |
 | `core/` | Use cases, domain values, validation, and the narrow interfaces adapters implement |
 | `internal/config/` | Root discovery and `timeline.yaml` decoding |
-| `internal/document/` | Markdown and frontmatter decoding, file writes |
+| `internal/document/` | Markdown and frontmatter decoding, stamping, safe file rewrites |
+| `internal/lock/` | The per-root writer lock |
+| `internal/plugins/goals/` | The built-in goals plugin: goal and task types and their rules |
 | `tests/integration/`, `tests/e2e/` | Real-filesystem and built-executable scenarios |
 
 `core/` must not import the CLI or read files itself. Inject the clock and effects, pass cancellation explicitly, and keep dependencies acyclic without a shared `utils` package. Each package documents ownership and invariants in `doc.go`.

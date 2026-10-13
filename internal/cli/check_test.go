@@ -172,47 +172,74 @@ func TestCheckWaitsForTheLockThenReportsConflict(t *testing.T) {
 	}
 }
 
-// taskOwnerPlugin is a test plugin that rejects tasks owned by "Nobody", or
-// fails outright when broken is set.
-type taskOwnerPlugin struct{ broken bool }
+// chorePlugin is a test plugin providing a "chore" type, which it rejects
+// when owned by "Nobody", or fails outright when broken is set.
+type chorePlugin struct{ broken bool }
 
-func (taskOwnerPlugin) Name() string          { return "owners" }
-func (taskOwnerPlugin) Types() []core.TypeDef { return []core.TypeDef{{Name: "task"}} }
-func (p taskOwnerPlugin) Validate(in core.PluginInput) ([]core.Diagnostic, error) {
+func (chorePlugin) Name() string { return "chores" }
+func (chorePlugin) Types() []core.TypeDef {
+	return []core.TypeDef{{Name: "chore", Timing: core.Future, Fields: []core.FieldDef{{Name: "owner", Kind: core.KindString, Required: true}}}}
+}
+func (p chorePlugin) Validate(in core.PluginInput) ([]core.Diagnostic, error) {
 	if p.broken {
 		return nil, errors.New("plugin crashed")
 	}
 	var out []core.Diagnostic
 	for _, e := range in.Events {
 		if f, ok := e.Doc.Field("owner"); ok && f.Value.Text == "Nobody" {
-			out = append(out, core.Diagnostic{Path: e.Path, Line: f.Line, Field: "owner", Message: "every task needs a real owner"})
+			out = append(out, core.Diagnostic{Path: e.Path, Line: f.Line, Field: "owner", Message: "every chore needs a real owner"})
 		}
 	}
 	return out, nil
 }
 
+// usePlugins runs the built-in plugins plus ps for the rest of the test.
 func usePlugins(t *testing.T, ps ...core.Plugin) {
 	t.Helper()
 	old := plugins
-	plugins = func() []core.Plugin { return ps }
+	plugins = func() []core.Plugin { return append(builtinPlugins(), ps...) }
 	t.Cleanup(func() { plugins = old })
 }
 
 func TestCheckRunsPlugins(t *testing.T) {
 	fixedEffects(t)
-	nobody := strings.Replace(draftTask, "owner: Ada", "owner: Nobody", 1)
-	root := writeRoot(t, map[string]string{"tasks/a.md": draftTask, "tasks/b.md": nobody})
+	chore := "---\ntype: chore\ntimeline_at: 2099-01-01T00:00:00Z\ncreated_by: test\nowner: Ada\n---\n"
+	root := writeRoot(t, map[string]string{
+		"tasks/a.md":    draftTask,
+		"chores/a.md":   chore,
+		"chores/b.md":   strings.Replace(chore, "owner: Ada", "owner: Nobody", 1),
+		"timeline.yaml": "", // replaced below
+	})
+	if err := os.WriteFile(filepath.Join(root, "timeline.yaml"), []byte(testConfig+"  chore: { folder: chores }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	usePlugins(t, taskOwnerPlugin{})
+	usePlugins(t, chorePlugin{})
 	code, res := runJSON(t, "--root", root, "--json", "check")
-	if code != ExitValidation || len(res.Diagnostics) != 1 || res.Diagnostics[0].Path != "tasks/b.md" || len(res.Stamped) != 0 {
+	if code != ExitValidation || len(res.Diagnostics) != 1 || res.Diagnostics[0].Path != "chores/b.md" || len(res.Stamped) != 0 {
 		t.Fatalf("exit %d, %+v", code, res)
 	}
 
-	usePlugins(t, taskOwnerPlugin{broken: true})
+	usePlugins(t, chorePlugin{broken: true})
 	var out, errOut bytes.Buffer
 	if code := Run(context.Background(), []string{"--root", root, "check", "--dry-run"}, &out, &errOut); code != ExitFailure ||
-		!strings.Contains(errOut.String(), "plugin owners: plugin crashed") {
+		!strings.Contains(errOut.String(), "plugin chores: plugin crashed") {
 		t.Fatalf("broken plugin: exit %d, stderr %q", code, errOut.String())
 	}
+}
+
+func TestTwoPluginsCannotProvideTheSameType(t *testing.T) {
+	root := writeRoot(t, map[string]string{"tasks/a.md": draftTask})
+	usePlugins(t, clashPlugin{})
+	code, res := runJSON(t, "--root", root, "--json", "check", "--dry-run")
+	if code != ExitValidation || len(res.Diagnostics) == 0 || !strings.Contains(res.Diagnostics[0].Message, `type "task" is provided by both plugin goals and plugin clash`) {
+		t.Fatalf("exit %d, %+v", code, res)
+	}
+}
+
+type clashPlugin struct{}
+
+func (clashPlugin) Name() string { return "clash" }
+func (clashPlugin) Types() []core.TypeDef {
+	return []core.TypeDef{{Name: "task", Timing: core.Future}}
 }

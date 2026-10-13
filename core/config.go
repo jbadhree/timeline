@@ -63,21 +63,11 @@ func (s *StatusDef) IsClosed(v string) bool {
 	return contains(s.Closed, v)
 }
 
-// Builtin identifies a built-in type.
-type Builtin string
-
-// Built-in types. NotBuiltin marks a configured type.
-const (
-	NotBuiltin Builtin = ""
-	GoalType   Builtin = "goal"
-	TaskType   Builtin = "task"
-)
-
 // TypeDef is one event type as configured in timeline.yaml.
 type TypeDef struct {
 	Name     string
 	Folder   string // slash-separated, relative to the root, cleaned
-	Builtin  Builtin
+	Plugin   string // name of the plugin that provides this type; empty if configured
 	Timing   TimingRule
 	MaxDelay time.Duration // only for RealTime
 	Fields   []FieldDef
@@ -133,7 +123,6 @@ const (
 	FieldEntryTiming = "entry_timing"
 	FieldCreatedBy   = "created_by"
 	FieldStatus      = "status"
-	FieldOwner       = "owner"
 )
 
 // SharedFields lists the frontmatter fields every event may carry. Types
@@ -142,50 +131,6 @@ var SharedFields = []string{FieldID, FieldType, FieldTimelineAt, FieldEnteredAt,
 
 // IsSharedField reports whether name is a shared field.
 func IsSharedField(name string) bool { return contains(SharedFields, name) }
-
-// Built-in section headings.
-const (
-	SectionWhy           = "Why"
-	SectionHow           = "How"
-	SectionDoneWhen      = "Done when"
-	SectionWhyItWillWork = "Why it will work"
-)
-
-// NewBuiltinType returns the definition of a built-in type stored in folder,
-// with a timeline's own extra fields and sections appended. It does not check
-// extras for conflicts; configuration decoding does that with
-// BuiltinFieldNames.
-func NewBuiltinType(b Builtin, folder string, extraFields []FieldDef, extraSections []string) TypeDef {
-	t := TypeDef{Name: string(b), Folder: folder, Builtin: b, Timing: Future}
-	switch b {
-	case GoalType:
-		t.Fields = []FieldDef{
-			{Name: "goal", Kind: KindString, Required: true, NonEmpty: true},
-			{Name: FieldOwner, Kind: KindString, Required: true, NonEmpty: true},
-		}
-		t.Status = &StatusDef{Values: []string{"open", "achieved", "missed", "dropped"}, Closed: []string{"achieved", "missed", "dropped"}}
-	case TaskType:
-		t.Fields = []FieldDef{
-			{Name: "task", Kind: KindString, Required: true, NonEmpty: true},
-			{Name: FieldOwner, Kind: KindString, Required: true, NonEmpty: true},
-		}
-		t.Status = &StatusDef{Values: []string{"open", "done", "dropped"}, Closed: []string{"done", "dropped"}}
-	}
-	t.Fields = append(t.Fields, extraFields...)
-	t.Sections = append(t.Sections, extraSections...)
-	return t
-}
-
-// BuiltinFieldNames returns the frontmatter fields a built-in type defines
-// itself, which a configuration may not redefine.
-func BuiltinFieldNames(b Builtin) []string {
-	return []string{string(b), FieldOwner, FieldStatus}
-}
-
-// IsBuiltinName reports whether name is reserved for a built-in type.
-func IsBuiltinName(name string) bool {
-	return name == string(GoalType) || name == string(TaskType)
-}
 
 func contains(list []string, v string) bool {
 	for _, s := range list {

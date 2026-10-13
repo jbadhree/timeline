@@ -35,8 +35,25 @@ types:
     folder: tasks
 `
 
+// templates is a stand-in for a plugin that provides goal and task types.
+type templates struct{}
+
+func (templates) Name() string { return "fake" }
+func (templates) Types() []core.TypeDef {
+	field := func(name string) core.FieldDef {
+		return core.FieldDef{Name: name, Kind: core.KindString, Required: true}
+	}
+	status := &core.StatusDef{Values: []string{"open", "done"}, Closed: []string{"done"}}
+	return []core.TypeDef{
+		{Name: "goal", Timing: core.Future, Fields: []core.FieldDef{field("goal"), field("owner")}, Status: status},
+		{Name: "task", Timing: core.Future, Fields: []core.FieldDef{field("task"), field("owner")}, Status: status},
+	}
+}
+
+var plugins = []core.Plugin{templates{}}
+
 func TestDecodeValid(t *testing.T) {
-	cfg, err := Decode([]byte(valid))
+	cfg, err := Decode([]byte(valid), plugins)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +65,7 @@ func TestDecodeValid(t *testing.T) {
 		t.Errorf("observation = %+v", obs)
 	}
 	goal, _ := cfg.TypeByName("goal")
-	if goal.Builtin != core.GoalType || goal.Timing != core.Future {
+	if goal.Plugin != "fake" || goal.Timing != core.Future || goal.Folder != "goals" {
 		t.Errorf("goal = %+v", goal)
 	}
 	if _, ok := goal.Field("budget"); !ok {
@@ -74,8 +91,8 @@ func TestDecodeErrors(t *testing.T) {
 		{"bad entry_timing", "version: 1\ntypes:\n  news: { folder: news, entry_timing: later }\n", "past, future, or real_time"},
 		{"real_time without delay", "version: 1\ntypes:\n  obs: { folder: obs, entry_timing: real_time }\n", "max_delay is required"},
 		{"delay on past", "version: 1\ntypes:\n  news: { folder: news, entry_timing: past, max_delay: 5m }\n", "only applies to real_time"},
-		{"built-in timing", "version: 1\ntypes:\n  goal: { folder: goals, entry_timing: past }\n", `unknown key "entry_timing"`},
-		{"built-in field", "version: 1\ntypes:\n  task:\n    folder: tasks\n    fields: { owner: { type: string } }\n", `cannot redefine the built-in field "owner"`},
+		{"plugin type timing", "version: 1\ntypes:\n  goal: { folder: goals, entry_timing: past }\n", `unknown key "entry_timing"`},
+		{"built-in field", "version: 1\ntypes:\n  task:\n    folder: tasks\n    fields: { owner: { type: string } }\n", `cannot redefine the field "owner" from plugin fake`},
 		{"shared field", "version: 1\ntypes:\n  news:\n    folder: news\n    entry_timing: past\n    fields: { timeline_at: { type: time } }\n", `cannot redefine the shared field "timeline_at"`},
 		{"same folder", "version: 1\ntypes:\n  a: { folder: x, entry_timing: past }\n  b: { folder: x, entry_timing: past }\n", "both use folder"},
 		{"nested folders", "version: 1\ntypes:\n  a: { folder: x, entry_timing: past }\n  b: { folder: x/y, entry_timing: past }\n", "must not be nested"},
@@ -83,10 +100,11 @@ func TestDecodeErrors(t *testing.T) {
 		{"list without items", "version: 1\ntypes:\n  a:\n    folder: a\n    entry_timing: past\n    fields: { tags: { type: list } }\n", "a list needs items"},
 		{"closed not in values", "version: 1\ntypes:\n  a:\n    folder: a\n    entry_timing: past\n    status: { values: [open], closed: [done] }\n", `closed status "done"`},
 		{"invalid YAML", "version: [1\n", "yaml"},
+		{"plugin type status", "version: 1\ntypes:\n  task: { folder: tasks, status: { values: [x] } }\n", `unknown key "status"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Decode([]byte(tt.yaml))
+			_, err := Decode([]byte(tt.yaml), plugins)
 			var cerr *Error
 			if !errors.As(err, &cerr) {
 				t.Fatalf("want *Error, got %v", err)
@@ -119,5 +137,36 @@ func TestFindRoot(t *testing.T) {
 	}
 	if _, err := FindRoot("", t.TempDir()); !errors.Is(err, ErrNoRoot) {
 		t.Errorf("no root anywhere: %v", err)
+	}
+}
+
+func TestPluginTypeNamesAreOrdinaryWithoutThePlugin(t *testing.T) {
+	// Without a plugin providing it, "goal" is just a configured type and
+	// needs its own entry_timing.
+	_, err := Decode([]byte("version: 1\ntypes:\n  goal: { folder: goals }\n"), nil)
+	if err == nil || !strings.Contains(err.Error(), "entry_timing is required") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+type badTemplates struct{ name string }
+
+func (b badTemplates) Name() string { return b.name }
+func (badTemplates) Types() []core.TypeDef {
+	return []core.TypeDef{{Name: "goal", Timing: core.Future}, {Name: "broken"}}
+}
+
+func TestPluginTemplateProblems(t *testing.T) {
+	_, err := Decode([]byte("version: 1\ntypes: {}\n"), []core.Plugin{templates{}, badTemplates{name: "other"}})
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	for _, want := range []string{
+		`type "goal" is provided by both plugin fake and plugin other`,
+		`plugin other provides type "broken" without a valid name and timing rule`,
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
 	}
 }
