@@ -11,6 +11,8 @@ status: open
 
 People and agents need to read events in time order, find what is upcoming or past due, and open the document behind each result. A database would only be a copy of the files that could drift out of date.
 
+Decided in [no database in the first release](../decisions/no-database-for-v1.md).
+
 ## How
 
 - [Define the core interface for reading events](../tasks/read-events-interface.md)

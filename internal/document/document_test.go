@@ -130,16 +130,25 @@ func TestScan(t *testing.T) {
 
 func TestLinkForms(t *testing.T) {
 	for text, want := range map[string]string{
-		`[a](plain.md)`:              "plain.md",
-		`[a](list%20files.md)`:       "list%20files.md",
-		`[a](<list files.md>)`:       "list files.md",
-		`[a](goal.md "Title")`:       "goal.md",
-		`[a](goal.md#how)`:           "goal.md#how",
-		`[a](https://example.com/x)`: "https://example.com/x",
+		`[a](plain.md)`:                    "plain.md",
+		`[a](list%20files.md)`:             "list%20files.md",
+		`[a](<list files.md>)`:             "list files.md",
+		`[a](goal.md "Title")`:             "goal.md",
+		`[a](goal.md#how)`:                 "goal.md#how",
+		`[a](https://example.com/x)`:       "https://example.com/x",
+		"`[code](no.md)` then [a](yes.md)": "yes.md",
 	} {
 		links := findLinks(text, 1)
 		if len(links) != 1 || links[0].Target != want {
 			t.Errorf("findLinks(%q) = %+v, want target %q", text, links, want)
 		}
+	}
+}
+
+func TestSectionLinksIncludeProse(t *testing.T) {
+	d := Parse("goals/g.md", []byte("---\ntype: goal\n---\n\n## Why\n\nBecause [we decided](../decisions/d.md) and [also](x.md).\n\n```\n[not a link](y.md)\n```\n"))
+	why, ok := d.Section("Why")
+	if !ok || len(why.Links) != 2 || why.Links[0].Target != "../decisions/d.md" || why.Links[0].Line != 7 {
+		t.Errorf("Why links = %+v", why)
 	}
 }

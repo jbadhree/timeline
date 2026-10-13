@@ -73,7 +73,7 @@ func TestCheckDryRunInvalidRootJSON(t *testing.T) {
 		`status|is "someday"`,
 		`Done when|is required`,
 		`Why it will work|is required`,
-		`|link "nowhere.md" does not resolve`,
+		`How|link "nowhere.md" does not resolve`,
 		`Why|is required because no goal links`,
 	}
 	var got []string

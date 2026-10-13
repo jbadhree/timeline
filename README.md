@@ -10,6 +10,7 @@ This repository plans and designs Timeline as Timeline goals and tasks. Start at
 
 - [`goals/`](goals/): what we are building and why, with the design for each part.
 - [`tasks/`](tasks/): concrete steps whose result is obvious.
+- [`decisions/`](decisions/): design decisions, current and superseded, linked from the goals they shaped.
 - [`examples/`](examples/README.md): worked configuration and event files.
 
 ## Development

@@ -32,13 +32,15 @@ Humans and agents edit Markdown files
    tline list / goal / task (read the files)
 ```
 
-This repository is itself a Timeline root. [`timeline.yaml`](../timeline.yaml) enables goals and tasks, and the `goals/` and `tasks/` folders hold this plan. Once `tline` exists, `tline goal tree` shows this goal down to its tasks.
+This repository is itself a Timeline root. [`timeline.yaml`](../timeline.yaml) enables goals and tasks, and the `goals/` and `tasks/` folders hold this plan. It also defines an ordinary `decision` type, with no special support in Timeline: `decisions/` records each design decision, `current` or `superseded`, and goals link to them from their Why. Once `tline` exists, `tline goal tree` shows this goal down to its tasks.
 
 ## Why
 
 Agents act and predict without a reliable sense of time: they confuse what was expected with what was learned afterward, and they lose track of what is due or overdue. People have the same problem across long-running work. A timeline that keeps both times, and keeps predictions whether or not they came true, lets readers reconstruct what was known at any moment. That accumulated record of expectations, outcomes, and assessments helps future predictions and can later serve as data for evaluation or fine-tuning.
 
 Planning Timeline as Timeline goals and tasks proves the goal format on real work before anyone else depends on it.
+
+Decided in [plan with goals](../decisions/plan-with-goals.md).
 
 ## How
 
@@ -98,4 +100,4 @@ Intended, not planned yet. Current decisions should not make them harder.
 
 ## Changing the plan
 
-To change what Timeline does, edit the goal that owns that part of the system, or add a goal and link it from a parent's `## How`. Keep the `## Design` section and `## Done when` in agreement: `## Done when` is what tests must demonstrate.
+To change what Timeline does, record a [decision](../decisions/), marking any decision it replaces as `superseded`, then edit the goal that owns that part of the system, or add a goal and link it from a parent's `## How`. Keep the `## Design` section and `## Done when` in agreement: `## Done when` is what tests must demonstrate.

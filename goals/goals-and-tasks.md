@@ -11,6 +11,8 @@ status: open
 
 Much of what agents and people put on a timeline is intended work. A goal that states what, why, by when, how, how we will know, why it will work, and who owns it can be checked for completeness, broken into smaller goals and tasks, and followed until it is achieved or goes past due. This plan is the first user.
 
+Decided in [goals and tasks are built in](../decisions/goals-and-tasks-built-in.md) and [every goal step must link](../decisions/goal-steps-must-link.md); their link rules move to a plugin per [link meanings belong to plugins](../decisions/relations-in-plugins.md).
+
 ## How
 
 - [Validate goal and task answers, links, and cycles](../tasks/validate-goals-and-tasks.md)
@@ -71,7 +73,7 @@ The goals in this folder are complete goal examples.
 
 Every step in a goal's `## How` must link to a goal or task, so all work under a goal has an owner, a date, and a status, and can go past due. A step may have text around its link, or link to several goals and tasks; plain-text steps, and steps that link only to URLs, documents, or other kinds of events, are rejected. A linked goal or task is a **child** of the goal; a task may be the child of more than one goal. Child links must not form a cycle.
 
-Links in `## Done when` are optional. When a goal is checked, every link in `## How` or `## Done when` that points into a configured folder must resolve to an event file; links to URLs, anchors, and files outside the folders are allowed there. A task's `## How` may link to documents, URLs, or other events, but not to a goal or task, so tasks are always leaves.
+Links in `## Why`, `## Done when`, and other sections are optional; a goal's Why can link to the [decisions](../decisions/plan-with-goals.md) behind it, or to any other event. When a goal is checked, every link in `## How` or `## Done when` that points into a configured folder must resolve to an event file; links to URLs, anchors, and files outside the folders are allowed there. A task's `## How` may link to documents, URLs, or other events, but not to a goal or task, so tasks are always leaves.
 
 Views resolve links to event `id`s, so a link still identifies the event the goal meant after the linked file moves. A stale path in an unchanged goal is reported as broken, not silently dropped.
 

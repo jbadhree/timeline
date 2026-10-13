@@ -86,4 +86,4 @@ Each event is one Markdown file in its type's folder: YAML frontmatter, then a M
 
 ### Links
 
-Events can link to other events, sections, external documents, or sources with relative Markdown links and optional heading anchors. A target with spaces is written percent-encoded, `[x](list%20files.md)`, or in angle brackets, `[x](<list files.md>)`. Timeline preserves links and interprets them only in [goals and tasks](goals-and-tasks.md#design). Backlinks and link repair are later work.
+Events can link to other events, sections, external documents, or sources with relative Markdown links and optional heading anchors. A target with spaces is written percent-encoded, `[x](list%20files.md)`, or in angle brackets, `[x](<list files.md>)`. In every event, a link that points into a configured type folder must resolve to an event file; `tline check` reports one that does not. Beyond that, Timeline gives links no meaning except in [goals and tasks](goals-and-tasks.md#design), and that meaning [belongs in plugins](../decisions/relations-in-plugins.md). Backlinks and link repair are later work.

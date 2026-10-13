@@ -78,6 +78,7 @@ func Check(in CheckInput) CheckResult {
 		v.checkEvent(e)
 	}
 	v.checkDuplicateIDs()
+	v.checkLinks()
 	v.checkGoalLinks()
 	v.checkCycles()
 	v.checkWhy()
@@ -407,12 +408,12 @@ type linkResult int
 
 const (
 	linkOther   linkResult = iota // URL, anchor, or file outside the configured folders
-	linkMissing                   // into a configured folder, but no such event; already reported
+	linkMissing                   // into a configured folder, but no such event
 	linkEvent                     // an event file in the root
 )
 
-// resolveLink returns the event a relative link points to. A link into a
-// configured folder that matches no event is reported here.
+// resolveLink returns the event a relative link points to. It reports
+// nothing; checkLinks reports missing targets once for every section.
 func (v *validator) resolveLink(e *event, l Link) (*event, linkResult) {
 	t := l.Target
 	if i := strings.IndexByte(t, '#'); i >= 0 {
@@ -433,10 +434,31 @@ func (v *validator) resolveLink(e *event, l Link) (*event, linkResult) {
 	}
 	target, found := v.byPath[p]
 	if !found {
-		v.add(Diagnostic{Path: e.doc.Path, Line: l.Line, Message: fmt.Sprintf("link %q does not resolve to an event (looked for %s)", l.Target, p)})
 		return nil, linkMissing
 	}
 	return target, linkEvent
+}
+
+// checkLinks reports every link, in any section of any event, that points
+// into a configured folder but matches no event file. Timeline gives links no
+// meaning here; it only checks that they lead somewhere.
+func (v *validator) checkLinks() {
+	for _, e := range v.events {
+		for _, s := range e.doc.Sections {
+			for _, l := range s.Links {
+				if _, r := v.resolveLink(e, l); r == linkMissing {
+					t := l.Target
+					if i := strings.IndexByte(t, '#'); i >= 0 {
+						t = t[:i]
+					}
+					if u, err := url.PathUnescape(t); err == nil {
+						t = u
+					}
+					v.add(Diagnostic{Path: e.doc.Path, Line: l.Line, Section: s.Heading, Message: fmt.Sprintf("link %q does not resolve to an event (looked for %s)", l.Target, path.Clean(path.Join(path.Dir(e.doc.Path), t)))})
+				}
+			}
+		}
+	}
 }
 
 func (v *validator) checkGoalLinks() {
@@ -446,13 +468,6 @@ func (v *validator) checkGoalLinks() {
 			if s, ok := e.doc.Section(SectionHow); ok {
 				for _, item := range s.Items {
 					v.goalStep(e, item)
-				}
-			}
-			if s, ok := e.doc.Section(SectionDoneWhen); ok {
-				for _, item := range s.Items {
-					for _, l := range item.Links {
-						v.resolveLink(e, l)
-					}
 				}
 			}
 		case TaskType:

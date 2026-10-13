@@ -9,5 +9,5 @@ status: open
 
 ## How
 
-- Mark an event past due when its type has a status, the status is open, and its event time is before now.
+- Mark an event past due when its type uses the Future rule and has a status, the status is open, and its event time is before now.
 - Never write past due into files.

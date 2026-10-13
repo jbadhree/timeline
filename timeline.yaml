@@ -1,4 +1,5 @@
-# This repository is a Timeline root: its plan and design are goals and tasks.
+# This repository is a Timeline root: its plan and design are goals and tasks,
+# and the design decisions behind them are decisions.
 # Start at goals/primary-goal-build-timeline.md.
 version: 1
 name: timeline
@@ -8,3 +9,12 @@ types:
     folder: goals # built-in type
   task:
     folder: tasks # built-in type
+
+  decision:
+    folder: decisions
+    entry_timing: past # recorded after it was made
+    status: { values: [current, superseded], closed: [superseded] }
+    fields:
+      decision: { type: string, required: true }
+      decided_by: { type: string, required: true }
+    sections: [Context, Consequences]

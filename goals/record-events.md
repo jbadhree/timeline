@@ -11,6 +11,8 @@ status: open
 
 Humans and agents edit files with whatever tools they like, so Timeline needs one explicit step that turns a draft into a recorded event with a trustworthy entry time. `tline check` is the only thing that writes the entry stamps; every view depends on that.
 
+Decided in [Timeline does not require Git](../decisions/no-git-requirement.md).
+
 ## How
 
 - [Add tline check --dry-run](../tasks/check-dry-run.md)

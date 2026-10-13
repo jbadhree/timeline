@@ -39,11 +39,18 @@ func items(heading string, texts ...string) Section {
 			it.Links = []Link{{Target: t[i+2 : i+end]}}
 		}
 		s.Items = append(s.Items, it)
+		s.Links = append(s.Links, it.Links...)
 	}
 	return s
 }
 
-func prose(heading, body string) Section { return Section{Heading: heading, Body: body} }
+func prose(heading, body string, links ...string) Section {
+	s := Section{Heading: heading, Body: body}
+	for _, l := range links {
+		s.Links = append(s.Links, Link{Target: l})
+	}
+	return s
+}
 
 func goalDoc(path string, sections ...Section) Document {
 	return Document{Path: path, Fields: []Field{
@@ -157,8 +164,8 @@ func TestGoalLinks(t *testing.T) {
 	g.Sections[2] = items("Done when", "[Outside](../README.md)", "[Web](https://example.com)", "[Anchor](#why)", "[Gone](../tasks/gone.md)")
 	res := check(t, g)
 	wantProblems(t, res, "goals/g.md",
-		`link "missing.md" does not resolve to an event (looked for goals/missing.md)`,
-		`link "../tasks/gone.md" does not resolve to an event (looked for tasks/gone.md)`,
+		`section "How": link "missing.md" does not resolve to an event (looked for goals/missing.md)`,
+		`section "Done when": link "../tasks/gone.md" does not resolve to an event (looked for tasks/gone.md)`,
 	)
 	// A missing link is reported once, not also as an unlinked step; links in
 	// Done when to files outside the folders, URLs, and anchors are fine.
@@ -308,4 +315,14 @@ func TestSelectedLimitsReportingButNotRootWideRules(t *testing.T) {
 func TestParseErrorIsReported(t *testing.T) {
 	bad := Document{Path: "goals/bad.md", ParseErr: &Diagnostic{Path: "goals/bad.md", Line: 1, Message: "must start with YAML frontmatter"}}
 	wantProblems(t, check(t, bad), "goals/bad.md", "must start with YAML frontmatter")
+}
+
+func TestLinksInAnySectionMustResolve(t *testing.T) {
+	g := fullGoal("goals/g.md")
+	g.Sections[0] = prose("Why", "Because of a decision.", "../goals/decided.md", "../goals/gone.md", "https://example.com")
+	res := check(t, g, stepTask, fullGoal("goals/decided.md"))
+	wantProblems(t, res, "goals/g.md", `section "Why": link "../goals/gone.md" does not resolve`)
+	if len(res.Diagnostics) != 1 {
+		t.Errorf("got %v", res.Diagnostics)
+	}
 }

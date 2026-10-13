@@ -52,6 +52,7 @@ type Section struct {
 	Line    int
 	Body    string // text between this heading and the next level-1 or level-2 heading
 	Items   []ListItem
+	Links   []Link // every link in the section outside fenced code, in order
 }
 
 // Document is one decoded event file.

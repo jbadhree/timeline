@@ -220,6 +220,7 @@ func parseBody(lines []string, firstLine int) []core.Section {
 		if cur == nil {
 			continue
 		}
+		cur.Links = append(cur.Links, findLinks(line, lineNo)...)
 		switch {
 		case listItemRE.MatchString(line):
 			flushItem()
@@ -236,8 +237,12 @@ func parseBody(lines []string, firstLine int) []core.Section {
 	return sections
 }
 
+// codeSpanRE matches inline code, whose contents are never links.
+var codeSpanRE = regexp.MustCompile("`+[^`]*`+")
+
 func findLinks(text string, line int) []core.Link {
 	var links []core.Link
+	text = codeSpanRE.ReplaceAllString(text, "")
 	for _, m := range linkRE.FindAllStringSubmatch(text, -1) {
 		target := m[2]
 		if target == "" {

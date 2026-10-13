@@ -11,6 +11,8 @@ status: open
 
 People rarely learn about things at the moment they happen. A report entered on Friday about something that happened on Monday has Monday as its event time and Friday as its entry time; a prediction entered on Monday about Friday has them the other way around. Keeping both lets readers tell what was expected in advance from what was learned afterward, and reconstruct what was known at any moment.
 
+Each recorded event carries its own rule: [entry_timing is written into the file](../decisions/entry-timing-in-file.md).
+
 ## How
 
 - [Validate past, future, and real_time timing with an injected clock](../tasks/validate-timing-rules.md)
@@ -66,4 +68,4 @@ The timing rule describes an event when it is first entered and does not change 
 
 ### Past due
 
-Where an event sits relative to now (past, upcoming, past due) is computed at read time and is separate from its entry timing rule. An event is **past due** when its type has `status`, its status is not closed, and its event time is before now. Past due is computed from the injected clock and never stored. It is not an error: the event stays valid and visible until someone closes it or moves its date. Moving a date is an ordinary edit; for a Future event the new date must still be after the original `entered_at`. Keeping a record of every slip is part of the [record store](primary-goal-build-timeline.md#later-directions).
+Where an event sits relative to now (past, upcoming, past due) is computed at read time and is separate from its entry timing rule. An event is **past due** when its type uses the Future rule and has `status`, its status is not closed, and its event time is before now. Only Future events can be past due: they were expected, while a Past or Real-time event's time has always passed, so a `current` decision is never past due. Past due is computed from the injected clock and never stored. It is not an error: the event stays valid and visible until someone closes it or moves its date. Moving a date is an ordinary edit; for a Future event the new date must still be after the original `entered_at`. Keeping a record of every slip is part of the [record store](primary-goal-build-timeline.md#later-directions).
