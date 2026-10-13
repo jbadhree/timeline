@@ -1,0 +1,13 @@
+version: 1
+name: my-work
+plugins: [goals]
+
+types:
+  note:
+    folder: notes
+    entry_timing: past
+    fields:
+      topic: { type: string, required: true }
+      tags: { type: list, items: string }
+  goal: { from: goals/goal, folder: goals }
+  task: { from: goals/task, folder: tasks }

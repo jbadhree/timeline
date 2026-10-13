@@ -54,6 +54,7 @@ Decided in [plan with goals](../decisions/plan-with-goals.md).
 - [Query the timeline](query-the-timeline.md)
 - [Plugins](plugins.md)
 - [Goals and tasks](goals-and-tasks.md)
+- [Write a quickstart for people and an instruction page for agents](../tasks/user-and-agent-guides.md)
 - [Build release executables](../tasks/build-release-executables.md)
 - [Run the first-release demo](../tasks/run-first-release-demo.md)
 

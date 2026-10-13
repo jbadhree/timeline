@@ -282,3 +282,39 @@ types:
 		t.Errorf("goal list should include the renamed objective type: %+v", r)
 	}
 }
+
+// TestQuickstartGuide keeps docs/quickstart.md honest: the quickstart
+// fixture is the guide's example timeline after "tline check", and the
+// outputs below are quoted in the guide.
+func TestQuickstartGuide(t *testing.T) {
+	root := fixture(t, "quickstart")
+	if r := tline(t, root, "check", "--dry-run"); r.code != 0 || r.stdout != "Dry run: checked 3 events (0 drafts, 3 recorded): all valid. Nothing was written.\n" {
+		t.Fatalf("check: %+v", r)
+	}
+	r := tline(t, root, "goal", "tree")
+	if want := "[open] Ship the first version  (2026-12-31)\n└─ [open] Write the user guide  (2026-12-15)\n"; r.code != 0 || r.stdout != want {
+		t.Errorf("goal tree =\n%s\nwant\n%s", r.stdout, want)
+	}
+	r = tline(t, root, "task", "list")
+	want := "DUE         STATUS  FLAGS  OWNER  TASK                  GOAL                    PATH\n" +
+		"2026-12-15  open           Ada    Write the user guide  goals/first-release.md  tasks/user-guide.md\n"
+	if r.code != 0 || r.stdout != want {
+		t.Errorf("task list =\n%s\nwant\n%s", r.stdout, want)
+	}
+
+	// The guide's broken task, added to a copy.
+	dir := copyFixture(t, "quickstart")
+	oops := "---\ntype: task\ntimeline_at: 2099-12-15T23:59:59Z\ncreated_by: Ada\ntask: Something unplanned\nonwer: Ada\nstatus: someday\n---\n\n## How\n\n- Do it.\n"
+	if err := os.WriteFile(filepath.Join(dir, "tasks", "oops.md"), []byte(oops), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r = tline(t, dir, "check", "--dry-run")
+	wantErrs := `tasks/oops.md: section "Why": is required because no goal links to this task from its How section
+tasks/oops.md: field "owner": is required
+tasks/oops.md:6: field "onwer": is not a field of type "task"
+tasks/oops.md:7: field "status": is "someday"; allowed values are open, done, dropped
+`
+	if r.code != 3 || !strings.HasPrefix(r.stdout, wantErrs) {
+		t.Errorf("broken task:\n%s", r.stdout)
+	}
+}

@@ -4,6 +4,11 @@ Timeline gives agents, and the humans working with them, a sense of time. It rec
 
 Events are Markdown files with YAML metadata, edited by humans and agents with any tool. Users define their own event types and Past, Future, or Real-time entry rules. Goals and tasks ship as a built-in plugin: a goal answers what, why, by when, how, how we know it is done, why it will work, and who owns it; a task is a simpler step whose result is obvious.
 
+## Using tline
+
+- [Quickstart](docs/quickstart.md): create a timeline, write and check events, and use goals and tasks.
+- [Instructions for agents](docs/agents.md): a short page to give an AI agent that keeps a timeline.
+
 ## Start here
 
 This repository plans and designs Timeline as Timeline goals and tasks. Start at the [primary goal](goals/primary-goal-build-timeline.md), which explains the system and links to every goal and task.
