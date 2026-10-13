@@ -17,6 +17,7 @@ const (
 	ExitUsage      = 2 // invalid flags, arguments, or command
 	ExitValidation = 3 // files or configuration failed validation
 	ExitConflict   = 4 // another check holds the lock, or a file changed during the check
+	ExitIncomplete = 5 // a view could not account for every relevant event
 )
 
 // Version is the release version. Release builds set it with
@@ -48,7 +49,7 @@ Commands:
   check           validate event files and stamp new drafts
   help            print this help
 
-Run 'tline check --help' for check's flags.
+Run 'tline <command> --help' for a command's flags.
 `
 
 // Run executes tline with args (excluding the program name) and returns the
@@ -64,7 +65,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return writeOut(stdout, stderr, usage)
+			return writeOut(stdout, stderr, usage+pluginUsage())
 		}
 		return usageError(stderr, err.Error())
 	}
@@ -79,12 +80,19 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	switch rest[0] {
 	case "help":
-		return writeOut(stdout, stderr, usage)
+		return writeOut(stdout, stderr, usage+pluginUsage())
 	case "check":
 		return runCheck(ctx, opts, rest[1:], stdout, stderr)
-	default:
-		return usageError(stderr, fmt.Sprintf("unknown command %q", rest[0]))
 	}
+	cmds, err := pluginCommands()
+	if err != nil {
+		diagnose(stderr, "%v", err)
+		return ExitFailure
+	}
+	if pc, ok := cmds[rest[0]]; ok {
+		return runPluginCommand(ctx, opts, pc, rest[1:], stdout, stderr)
+	}
+	return usageError(stderr, fmt.Sprintf("unknown command %q", rest[0]))
 }
 
 func usageError(stderr io.Writer, msg string) int {

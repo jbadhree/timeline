@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -156,5 +157,31 @@ func TestPluginDiagnosticsRespectSelection(t *testing.T) {
 	})
 	if len(res.Diagnostics) != 1 || res.Diagnostics[0].Path != "decisions/b.md" {
 		t.Fatalf("got %v", res.Diagnostics)
+	}
+}
+
+func TestRunCommandGivesFactsAndOwnDiagnostics(t *testing.T) {
+	var got CommandInput
+	cmd := Command{Name: "decision", Run: func(_ context.Context, in CommandInput) (CommandOutput, error) {
+		got = in
+		return CommandOutput{Text: "ok"}, nil
+	}}
+	badTask := taskDoc("tasks/bad.md")
+	badTask.Fields = badTask.Fields[:3] // missing fields: not the plugin's problem
+	out, err := RunCommand(context.Background(), CheckInput{
+		Config:   pluginConfig(),
+		Docs:     []Document{decisionDoc("decisions/a.md", "current"), decisionDoc("decisions/b.md", "maybe"), badTask},
+		Selected: []string{"decisions/a.md"}, // ignored: a command sees the whole root
+		Now:      testNow,
+		Plugins:  []Plugin{decisionsPlugin{}},
+	}, decisionsPlugin{}, cmd, []string{"current"}, true)
+	if err != nil || out.Text != "ok" {
+		t.Fatalf("out %+v, err %v", out, err)
+	}
+	if len(got.Events) != 2 || !got.JSON || len(got.Args) != 1 || !got.Now.Equal(testNow) {
+		t.Errorf("input = %+v", got)
+	}
+	if len(got.Diagnostics) != 1 || got.Diagnostics[0].Path != "decisions/b.md" {
+		t.Errorf("diagnostics = %+v", got.Diagnostics)
 	}
 }

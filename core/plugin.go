@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
@@ -35,16 +36,61 @@ type Validator interface {
 }
 
 // CommandProvider is a plugin that adds tline subcommands, such as
-// "goal tree". Routing commands to plugins is done by the CLI.
+// "goal tree". The CLI routes "tline <Name> ..." to the command.
 type CommandProvider interface {
 	Plugin
 	Commands() []Command
 }
 
-// Command is a subcommand a plugin adds.
+// Command is a subcommand a plugin adds. A command reads facts and returns
+// output; it never writes files.
 type Command struct {
 	Name    string // as typed after "tline", such as "goal"
 	Summary string // one line for tline --help
+	Usage   string // shown for "tline <Name> --help"
+	Run     func(ctx context.Context, in CommandInput) (CommandOutput, error)
+}
+
+// CommandInput is what a command sees: the same facts as a validator, its
+// arguments, and the problems a full check found in the plugin's events.
+type CommandInput struct {
+	PluginInput
+	Args []string // after the command name, without --json
+	JSON bool     // whether the caller asked for JSON output
+	// Diagnostics are the problems in the plugin's events. A view that
+	// relies on an invalid event should mark its output incomplete rather
+	// than silently leave the event out.
+	Diagnostics []Diagnostic
+}
+
+// CommandOutput is what a command returns.
+type CommandOutput struct {
+	Text       string // printed when JSON was not requested
+	JSON       any    // encoded when JSON was requested
+	Incomplete bool   // the result could not account for every relevant event
+}
+
+// UsageError is returned by a command for invalid arguments.
+type UsageError struct{ Msg string }
+
+func (e UsageError) Error() string { return e.Msg }
+
+// RunCommand checks the root, then runs cmd, a command of plugin p, with p's
+// facts and the diagnostics found in p's events.
+func RunCommand(ctx context.Context, in CheckInput, p Plugin, cmd Command, args []string, asJSON bool) (CommandOutput, error) {
+	in.Selected = nil
+	v, res, err := validate(in)
+	if err != nil {
+		return CommandOutput{}, err
+	}
+	facts, owned := v.pluginInput(pluginTypes(p))
+	cin := CommandInput{PluginInput: facts, Args: args, JSON: asJSON, Diagnostics: []Diagnostic{}}
+	for _, d := range res.Diagnostics {
+		if owned[d.Path] {
+			cin.Diagnostics = append(cin.Diagnostics, d)
+		}
+	}
+	return cmd.Run(ctx, cin)
 }
 
 // PluginInput is what a validator sees: read-only facts about the events of

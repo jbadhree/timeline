@@ -61,6 +61,13 @@ type validator struct {
 // each plugin's validator. It never assigns IDs or entry times and has no side
 // effects. An error means a plugin failed, not that an event is invalid.
 func Check(in CheckInput) (CheckResult, error) {
+	_, res, err := validate(in)
+	return res, err
+}
+
+// validate runs Check and also returns the validator, whose events plugin
+// commands read.
+func validate(in CheckInput) (*validator, CheckResult, error) {
 	v := &validator{in: in, byPath: map[string]*event{}}
 	for i := range in.Docs {
 		d := &in.Docs[i]
@@ -81,10 +88,10 @@ func Check(in CheckInput) (CheckResult, error) {
 	v.checkDuplicateIDs()
 	v.checkLinks()
 	if err := v.runPlugins(); err != nil {
-		return CheckResult{}, err
+		return nil, CheckResult{}, err
 	}
 
-	return v.result(), nil
+	return v, v.result(), nil
 }
 
 func (v *validator) add(d Diagnostic) { v.diags = append(v.diags, d) }
