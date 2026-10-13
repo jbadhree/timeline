@@ -7,7 +7,7 @@ timeline_at: 2026-12-05T23:59:59Z
 created_by: claude
 goal: Let plugins define types, validation rules, and commands, and ship goals and tasks as the first one
 owner: Badhree Babu
-status: open
+status: achieved
 ---
 
 ## Why
