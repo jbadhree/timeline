@@ -9,3 +9,6 @@
 
 # Pinned developer tools installed by the Makefile.
 /bin/
+
+# Release archives built by make release.
+/dist/
