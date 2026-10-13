@@ -7,7 +7,7 @@ timeline_at: 2026-12-24T23:59:59Z
 created_by: claude
 task: Build tline executables for macOS and Linux with checksums
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How
