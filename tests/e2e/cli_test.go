@@ -49,10 +49,17 @@ type result struct {
 
 func tline(t *testing.T, dir string, args ...string) result {
 	t.Helper()
+	return tlineEnv(t, dir, nil, args...)
+}
+
+// tlineEnv runs tline with extra environment variables such as "NAME=value".
+func tlineEnv(t *testing.T, dir string, env []string, args ...string) result {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, tlineBin, args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	err := cmd.Run()

@@ -43,6 +43,9 @@ span the root, such as duplicate IDs and links, still consider every file.
 Flags:
   --dry-run   validate only; change no files
   --json      machine-readable output on stdout
+
+Environment:
+  TLINE_LOCK_WAIT   how long to wait for another check's lock (default 10s)
 `
 
 // stampResult describes one draft that was stamped.
@@ -107,7 +110,15 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 	out := checkOutput{Root: root, DryRun: *dryRun, Events: []core.EventResult{}, Diagnostics: []core.Diagnostic{}, Stamped: []stampResult{}}
 
 	if !*dryRun {
-		release, err := lock.Acquire(ctx, filepath.Join(root, ".tline", "lock"), lockWait)
+		wait := lockWait
+		if v := os.Getenv("TLINE_LOCK_WAIT"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil || d < 0 {
+				return usageError(stderr, fmt.Sprintf("TLINE_LOCK_WAIT=%q is not a duration such as 10s", v))
+			}
+			wait = d
+		}
+		release, err := lock.Acquire(ctx, filepath.Join(root, ".tline", "lock"), wait)
 		if err != nil {
 			if errors.Is(err, lock.ErrHeld) {
 				out.Conflict = err.Error()

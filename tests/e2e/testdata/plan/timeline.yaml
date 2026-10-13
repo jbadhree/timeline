@@ -1,0 +1,5 @@
+version: 1
+name: e2e-plan
+types:
+  goal: { folder: goals }
+  task: { folder: tasks }
