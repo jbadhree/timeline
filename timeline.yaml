@@ -13,7 +13,7 @@ types:
   decision:
     folder: decisions
     entry_timing: past # recorded after it was made
-    status: { values: [current, superseded], closed: [superseded] }
+    status: { values: [open, current, superseded], closed: [superseded] } # open: raised, not yet decided
     fields:
       decision: { type: string, required: true }
       decided_by: { type: string, required: true }

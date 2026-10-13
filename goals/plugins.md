@@ -20,14 +20,12 @@ Every domain gives its events and links its own meaning: goals have children, de
 - [Move goal and task rules into a built-in goals plugin](../tasks/goals-plugin.md)
 - [Enable plugins and their types in timeline.yaml](../tasks/plugin-config.md)
 - [Let plugins register commands](../tasks/plugin-commands.md)
-- [Run external validator plugins over a JSON protocol](../tasks/external-plugin-protocol.md)
 
 ## Done when
 
 - `core/` contains no goal- or task-specific code: no children, cycles, inherited why, or linked-step rules.
 - Every existing goal and task test passes against the goals plugin, and this repository's goals and tasks check exactly as before.
 - `tline goal` and `tline task` exist only because the goals plugin registers them.
-- An example external plugin, written as a short script, adds a diagnostic to a configured type through the JSON protocol.
 
 ## Why it will work
 
@@ -77,6 +75,6 @@ types:
 - `plugins` lists the plugins a timeline uses; only those run, and a listed plugin that `tline` does not have is an error. Without the list, every built-in plugin is used, so older roots keep working. A plugin that is not listed leaves its type names free for ordinary configured types, and its commands refuse to run in that timeline.
 - `from: plugin/type` builds a type from a plugin's template. The type may have any name, and several types may share one template; the plugin's rules follow the template (`TypeDef.Base`), not the name. Without `from`, a type named like a type of a used plugin is built from it, as in `goal: { folder: goals }`; if two used plugins provide that name, `from` must choose.
 - `validators` adds the rules of other used plugins to a type; those plugins then receive its events.
-- External plugins, written as `- name: { run: ./path }`, are rejected until the external protocol exists.
+- External plugins, written as `- name: { run: ./path }`, are rejected: whether and when to support them is an [open decision](../decisions/external-plugins.md).
 
 A plugin depending on another plugin's types reads only that plugin's facts, never its meaning. Versioned plugin names and the protocol version keep this stable. WebAssembly plugins are a possible later option if untrusted plugins ever matter.
