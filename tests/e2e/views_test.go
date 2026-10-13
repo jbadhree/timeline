@@ -216,3 +216,69 @@ func TestThisRepositorysPlanIsValid(t *testing.T) {
 		t.Errorf("goal tree on this repository: %+v", r)
 	}
 }
+
+func writeFiles(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	for rel, content := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func TestTimelineWithoutTheGoalsPlugin(t *testing.T) {
+	// With an empty plugins list, "task" is an ordinary configured type:
+	// no goal or task rules apply, and the goal commands refuse to run.
+	root := writeFiles(t, map[string]string{
+		"timeline.yaml": "version: 1\nplugins: []\ntypes:\n  task: { folder: tasks, entry_timing: future }\n",
+		"tasks/a.md":    "---\ntype: task\ntimeline_at: 2099-01-01T00:00:00Z\ncreated_by: e2e\n---\n\nNo owner, status, or How: fine for a plain configured type.\n",
+	})
+	if r := tline(t, root, "check", "--dry-run"); r.code != 0 {
+		t.Fatalf("check: %+v", r)
+	}
+	r := tline(t, root, "goal", "list")
+	if r.code != 2 || !strings.Contains(r.stderr, "the goals plugin is not enabled in timeline.yaml; add it to plugins") {
+		t.Errorf("goal list: %+v", r)
+	}
+}
+
+func TestExplicitPluginConfig(t *testing.T) {
+	goal := func(typ, title, how string) string {
+		return "---\ntype: " + typ + "\ntimeline_at: 2099-12-31T00:00:00Z\ncreated_by: e2e\ngoal: " + title + "\nowner: Ada\nstatus: open\n---\n\n## Why\n\nBecause.\n\n## How\n\n" + how + "\n\n## Done when\n\n- Done.\n\n## Why it will work\n\nIt will.\n"
+	}
+	root := writeFiles(t, map[string]string{
+		"timeline.yaml": `version: 1
+plugins: [goals]
+types:
+  goal: { from: goals/goal, folder: goals }
+  objective: { from: goals/goal, folder: objectives }
+  task: { from: goals/task, folder: tasks }
+`,
+		"goals/g.md":      goal("goal", "Company goal", "- [Team objective](../objectives/o.md)"),
+		"objectives/o.md": goal("objective", "Team objective", "- [Do it](../tasks/t.md)"),
+		"tasks/t.md":      "---\ntype: task\ntimeline_at: 2099-06-01T00:00:00Z\ncreated_by: e2e\ntask: Do it\nowner: Bo\nstatus: open\n---\n\n## How\n\n- Just do it.\n",
+	})
+	if r := tline(t, root, "check", "--dry-run"); r.code != 0 {
+		t.Fatalf("check: %+v", r)
+	}
+	r := tline(t, root, "goal", "tree", "g")
+	want := []string{"[open] Company goal", "└─ [open] Team objective", "   └─ [open] Do it"}
+	lines := strings.Split(strings.TrimRight(r.stdout, "\n"), "\n")
+	if r.code != 0 || len(lines) != 3 {
+		t.Fatalf("goal tree: %+v", r)
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(lines[i], w) {
+			t.Errorf("line %d = %q, want prefix %q", i, lines[i], w)
+		}
+	}
+	if r = tline(t, root, "goal", "list"); r.code != 0 || !strings.Contains(r.stdout, "objectives/o.md") {
+		t.Errorf("goal list should include the renamed objective type: %+v", r)
+	}
+}

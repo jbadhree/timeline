@@ -65,14 +65,20 @@ func (s *StatusDef) IsClosed(v string) bool {
 
 // TypeDef is one event type as configured in timeline.yaml.
 type TypeDef struct {
-	Name     string
-	Folder   string // slash-separated, relative to the root, cleaned
-	Plugin   string // name of the plugin that provides this type; empty if configured
-	Timing   TimingRule
-	MaxDelay time.Duration // only for RealTime
-	Fields   []FieldDef
-	Sections []string // required ## headings
-	Status   *StatusDef
+	Name   string
+	Folder string // slash-separated, relative to the root, cleaned
+	Plugin string // name of the plugin that provides this type; empty if configured
+	// Base is the name of the plugin's type this type was built from, which
+	// differs from Name when a timeline renames it, as in
+	// "objective: { from: goals/goal }". Empty for configured types.
+	Base string
+	// Validators names further plugins whose rules apply to this type.
+	Validators []string
+	Timing     TimingRule
+	MaxDelay   time.Duration // only for RealTime
+	Fields     []FieldDef
+	Sections   []string // required ## headings
+	Status     *StatusDef
 }
 
 // Field returns the named type-specific field definition.
@@ -90,7 +96,12 @@ type Config struct {
 	Version int
 	Name    string
 	Types   []TypeDef
+	// Plugins names the plugins this timeline uses. Only these run.
+	Plugins []string
 }
+
+// UsesPlugin reports whether the timeline enables the named plugin.
+func (c *Config) UsesPlugin(name string) bool { return contains(c.Plugins, name) }
 
 // TypeByName returns the named type.
 func (c *Config) TypeByName(name string) (*TypeDef, bool) {

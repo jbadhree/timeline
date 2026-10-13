@@ -20,12 +20,20 @@ type model struct {
 	nodes map[string]*node // by path
 	order []*node          // by path
 	links map[string][]core.ResolvedLink
+	// kinds maps each configured type name to the plugin type it was built
+	// from ("goal" or "task"), so renamed types keep their rules.
+	kinds map[string]string
 }
 
 // newModel builds the tree. A link in a goal's How list item to a goal or
 // task makes the target a child. Events that failed to parse are left out.
 func newModel(in core.PluginInput) *model {
-	m := &model{nodes: map[string]*node{}, links: map[string][]core.ResolvedLink{}}
+	m := &model{nodes: map[string]*node{}, links: map[string][]core.ResolvedLink{}, kinds: map[string]string{}}
+	for _, t := range in.Config.Types {
+		if t.Plugin == pluginName {
+			m.kinds[t.Name] = t.Base
+		}
+	}
 	for _, ev := range in.Events {
 		if ev.Doc.ParseErr != nil {
 			continue
@@ -39,11 +47,11 @@ func newModel(in core.PluginInput) *model {
 		m.links[l.From] = append(m.links[l.From], l)
 	}
 	for _, n := range m.order {
-		if n.ev.Type.Name != Goal {
+		if n.kind() != Goal {
 			continue
 		}
 		for _, l := range m.stepLinks(n) {
-			if !isGoalOrTask(l.ToType) {
+			if !m.isGoalOrTask(l.ToType) {
 				continue
 			}
 			if child, ok := m.nodes[l.To]; ok {
@@ -66,12 +74,28 @@ func (m *model) stepLinks(n *node) []core.ResolvedLink {
 	return out
 }
 
-// title returns the goal or task statement.
+// kind returns "goal" or "task": the plugin type the node's type was built
+// from, whatever the timeline calls it.
+func (n *node) kind() string {
+	if n.ev.Type.Base != "" {
+		return n.ev.Type.Base
+	}
+	return n.ev.Type.Name
+}
+
+// isGoalOrTask reports whether a configured type name is a goal or task type.
+func (m *model) isGoalOrTask(typeName string) bool {
+	k := m.kinds[typeName]
+	return k == Goal || k == Task
+}
+
+// title returns the goal or task statement, from the field named after the
+// plugin type ("goal" or "task").
 func (n *node) title() string {
-	if f, ok := n.ev.Doc.Field(n.ev.Type.Name); ok && f.Value.Kind == core.ValueString {
+	if f, ok := n.ev.Doc.Field(n.kind()); ok && f.Value.Kind == core.ValueString {
 		return f.Value.Text
 	}
-	return "(no " + n.ev.Type.Name + " statement)"
+	return "(no " + n.kind() + " statement)"
 }
 
 // field returns a string field's value, or "".
@@ -97,7 +121,7 @@ func (n *node) section(heading string) (string, bool) {
 func (m *model) find(arg, typ string) []*node {
 	var out []*node
 	for _, n := range m.order {
-		if typ != "" && n.ev.Type.Name != typ {
+		if typ != "" && n.kind() != typ {
 			continue
 		}
 		base := n.ev.Path[strings.LastIndexByte(n.ev.Path, '/')+1:]

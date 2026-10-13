@@ -70,7 +70,7 @@ func runGoal(_ context.Context, in core.CommandInput) (core.CommandOutput, error
 			roots = []*node{n}
 		} else {
 			for _, n := range byDue(m.order) {
-				if n.ev.Type.Name == Goal && len(n.parents) == 0 {
+				if n.kind() == Goal && len(n.parents) == 0 {
 					roots = append(roots, n)
 				}
 			}
@@ -205,7 +205,7 @@ func listView(m *model, in core.CommandInput, typ string, args []string) (core.C
 
 	var rows []*node
 	for _, n := range byDue(m.order) {
-		if n.ev.Type.Name != typ ||
+		if n.kind() != typ ||
 			(*owner != "" && n.field("owner") != *owner) ||
 			(*status != "" && n.field(core.FieldStatus) != *status) ||
 			(*pastDue && !n.ev.PastDue) {
@@ -265,7 +265,7 @@ func showGoal(m *model, n *node) core.CommandOutput {
 		for i, it := range how.Items {
 			st := step{Text: it.Text, Targets: []item{}}
 			for _, l := range byItem[i] {
-				if t, ok := m.nodes[l.To]; ok && isGoalOrTask(l.ToType) {
+				if t, ok := m.nodes[l.To]; ok && m.isGoalOrTask(l.ToType) {
 					st.Targets = append(st.Targets, toItem(t))
 					fmt.Fprintf(&b, "  - [%s] %s: %s  (%s)%s\n", t.field(core.FieldStatus), t.ev.Type.Name, t.title(), date(t.ev.Time), suffix(flags(t)))
 				}

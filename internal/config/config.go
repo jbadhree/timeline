@@ -89,28 +89,17 @@ func Load(root string, plugins []core.Plugin) (*core.Config, error) {
 
 // Decode decodes timeline.yaml content. An invalid file returns *Error.
 //
-// A type whose name matches a type provided by one of plugins is built from
-// that plugin's template: the configuration chooses its folder and may add
-// fields and sections, but cannot set its timing, status, or the template's
-// own fields.
-func Decode(data []byte, plugins []core.Plugin) (*core.Config, error) {
-	d := &decoder{templates: map[string]core.TypeDef{}}
-	for _, p := range plugins {
-		tp, ok := p.(core.TypeProvider)
-		if !ok {
-			continue
-		}
-		for _, t := range tp.Types() {
-			switch prev, dup := d.templates[t.Name]; {
-			case dup:
-				d.errf(nil, "type %q is provided by both plugin %s and plugin %s", t.Name, prev.Plugin, p.Name())
-			case !validName(t.Name) || !t.Timing.Valid():
-				d.errf(nil, "plugin %s provides type %q without a valid name and timing rule", p.Name(), t.Name)
-			default:
-				t.Plugin = p.Name()
-				d.templates[t.Name] = t
-			}
-		}
+// available are the plugins tline can run. The file's "plugins" list chooses
+// which of them this timeline uses; without the list, all of them are used.
+// A type with "from: plugin/type", or named like a type of a used plugin, is
+// built from that plugin's template: the configuration chooses its folder and
+// may add fields, sections, and validators, but cannot set its timing,
+// status, or the template's own fields.
+func Decode(data []byte, available []core.Plugin) (*core.Config, error) {
+	d := &decoder{available: map[string]core.Plugin{}}
+	for _, p := range available {
+		d.available[p.Name()] = p
+		d.availableOrder = append(d.availableOrder, p.Name())
 	}
 	cfg := d.decode(data)
 	if len(d.diags) > 0 {
@@ -121,8 +110,15 @@ func Decode(data []byte, plugins []core.Plugin) (*core.Config, error) {
 }
 
 type decoder struct {
-	diags     []core.Diagnostic
-	templates map[string]core.TypeDef // plugin types by name
+	diags          []core.Diagnostic
+	available      map[string]core.Plugin
+	availableOrder []string
+	enabled        []string
+	// templates are the types of enabled plugins, by "plugin/type".
+	templates map[string]core.TypeDef
+	// byName lists the "plugin/type" keys providing each type name, for the
+	// short form "goal: { folder: goals }".
+	byName map[string][]string
 }
 
 func (d *decoder) errf(n *yaml.Node, format string, args ...any) {
@@ -200,9 +196,9 @@ func (d *decoder) decode(data []byte) *core.Config {
 		return nil
 	}
 	cfg := &core.Config{}
-	var typesNode *yaml.Node
+	var typesNode, pluginsNode *yaml.Node
 	hasVersion := false
-	for _, kv := range d.pairs(doc.Content[0], FileName, "version", "name", "types") {
+	for _, kv := range d.pairs(doc.Content[0], FileName, "version", "name", "plugins", "types") {
 		k, v := kv[0], kv[1]
 		switch k.Value {
 		case "version":
@@ -213,10 +209,14 @@ func (d *decoder) decode(data []byte) *core.Config {
 			cfg.Version = 1
 		case "name":
 			cfg.Name, _ = d.str(v, "name")
+		case "plugins":
+			pluginsNode = v
 		case "types":
 			typesNode = v
 		}
 	}
+	d.decodePlugins(pluginsNode)
+	cfg.Plugins = d.enabled
 	if !hasVersion {
 		d.errf(doc.Content[0], "version is required")
 	}
@@ -240,21 +240,25 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 		d.errf(k, "type name %q must use lowercase letters, digits, and underscores", name)
 		return core.TypeDef{}, false
 	}
-	template, fromPlugin := d.templates[name]
-	allowed := []string{"folder", "entry_timing", "max_delay", "fields", "sections", "status"}
+	template, fromPlugin, ok := d.typeTemplate(name, v)
+	if !ok {
+		return core.TypeDef{}, false
+	}
+	allowed := []string{"folder", "entry_timing", "max_delay", "fields", "sections", "status", "validators"}
 	if fromPlugin {
-		allowed = []string{"folder", "fields", "sections"}
+		allowed = []string{"from", "folder", "fields", "sections", "validators"}
 	}
 	before := len(d.diags)
 	var (
-		folder   string
-		timing   core.TimingRule
-		maxDelay time.Duration
-		hasDelay bool
-		hasKey   = map[string]bool{}
-		fields   []core.FieldDef
-		sections []string
-		status   *core.StatusDef
+		folder     string
+		timing     core.TimingRule
+		maxDelay   time.Duration
+		hasDelay   bool
+		hasKey     = map[string]bool{}
+		fields     []core.FieldDef
+		sections   []string
+		status     *core.StatusDef
+		validators []string
 	)
 	fieldsNode := (*yaml.Node)(nil)
 	for _, kv := range d.pairs(v, what, allowed...) {
@@ -287,6 +291,8 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 			sections, _ = d.strList(val, what+": sections")
 		case "status":
 			status = d.decodeStatus(val, what)
+		case "validators":
+			validators = d.decodeValidators(val, what, template.Plugin)
 		}
 	}
 	if !hasKey["folder"] {
@@ -317,15 +323,125 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 	}
 	if fromPlugin {
 		t := template
-		t.Folder = folder
+		t.Name, t.Base, t.Folder = name, template.Name, folder
 		t.Fields = append(append([]core.FieldDef{}, template.Fields...), fields...)
 		t.Sections = append(append([]string{}, template.Sections...), sections...)
+		t.Validators = validators
 		return t, true
 	}
 	return core.TypeDef{
 		Name: name, Folder: folder, Timing: timing, MaxDelay: maxDelay,
-		Fields: fields, Sections: sections, Status: status,
+		Fields: fields, Sections: sections, Status: status, Validators: validators,
 	}, true
+}
+
+// decodePlugins reads the "plugins" list, or enables every available plugin
+// when there is none, then collects the enabled plugins' type templates.
+func (d *decoder) decodePlugins(n *yaml.Node) {
+	if n == nil {
+		d.enabled = append([]string{}, d.availableOrder...)
+	} else if n.Kind != yaml.SequenceNode {
+		d.errf(n, "plugins must be a list of plugin names")
+	} else {
+		for _, item := range n.Content {
+			if item.Kind == yaml.MappingNode {
+				d.errf(item, "external plugins are not supported yet; list built-in plugins by name (available: %s)", strings.Join(d.availableOrder, ", "))
+				continue
+			}
+			name, ok := d.str(item, "plugins item")
+			switch {
+			case !ok:
+			case d.available[name] == nil:
+				d.errf(item, "unknown plugin %q (available: %s)", name, strings.Join(d.availableOrder, ", "))
+			case contains(d.enabled, name):
+				d.errf(item, "plugin %q is listed twice", name)
+			default:
+				d.enabled = append(d.enabled, name)
+			}
+		}
+	}
+
+	d.templates, d.byName = map[string]core.TypeDef{}, map[string][]string{}
+	for _, name := range d.enabled {
+		tp, ok := d.available[name].(core.TypeProvider)
+		if !ok {
+			continue
+		}
+		for _, t := range tp.Types() {
+			if !validName(t.Name) || !t.Timing.Valid() {
+				d.errf(n, "plugin %s provides type %q without a valid name and timing rule", name, t.Name)
+				continue
+			}
+			t.Plugin = name
+			key := name + "/" + t.Name
+			d.templates[key] = t
+			d.byName[t.Name] = append(d.byName[t.Name], key)
+		}
+	}
+}
+
+// typeTemplate finds the plugin template for a type: the one named by its
+// "from" key, or, without one, the enabled plugin type with the same name.
+// fromPlugin is false for an ordinary configured type.
+func (d *decoder) typeTemplate(name string, v *yaml.Node) (t core.TypeDef, fromPlugin, ok bool) {
+	what := "type " + name
+	if v.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(v.Content); i += 2 {
+			if v.Content[i].Value != "from" {
+				continue
+			}
+			from, good := d.str(v.Content[i+1], what+": from")
+			if !good {
+				return core.TypeDef{}, false, false
+			}
+			plugin, _, _ := strings.Cut(from, "/")
+			switch t, found := d.templates[from]; {
+			case found:
+				return t, true, true
+			case d.available[plugin] != nil && !contains(d.enabled, plugin):
+				d.errf(v.Content[i+1], "%s: plugin %s is not enabled; add it to plugins", what, plugin)
+			default:
+				d.errf(v.Content[i+1], "%s: from %q does not name a plugin type (use plugin/type, such as goals/goal)", what, from)
+			}
+			return core.TypeDef{}, false, false
+		}
+	}
+	switch keys := d.byName[name]; len(keys) {
+	case 0:
+		return core.TypeDef{}, false, true
+	case 1:
+		return d.templates[keys[0]], true, true
+	default:
+		var plugins []string
+		for _, k := range keys {
+			plugins = append(plugins, d.templates[k].Plugin)
+		}
+		d.errf(v, "%s: type %q is provided by both plugin %s; use from: to choose one", what, name, strings.Join(plugins, " and plugin "))
+		return core.TypeDef{}, false, false
+	}
+}
+
+// decodeValidators reads a type's "validators" list: enabled plugins that
+// validate, other than the type's own plugin.
+func (d *decoder) decodeValidators(n *yaml.Node, what, own string) []string {
+	names, _ := d.strList(n, what+": validators")
+	var out []string
+	for _, name := range names {
+		p := d.available[name]
+		switch _, validates := p.(core.Validator); {
+		case p == nil:
+			d.errf(n, "%s: unknown validator plugin %q", what, name)
+		case !contains(d.enabled, name):
+			d.errf(n, "%s: plugin %s is not enabled; add it to plugins", what, name)
+		case !validates:
+			d.errf(n, "%s: plugin %s has no validation rules", what, name)
+		case name == own:
+			d.errf(n, "%s: plugin %s already validates its own types", what, name)
+		default:
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func (d *decoder) cleanFolder(n *yaml.Node, s, what string) string {

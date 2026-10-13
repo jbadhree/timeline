@@ -7,7 +7,7 @@ timeline_at: 2026-11-28T23:59:59Z
 created_by: claude
 task: Enable plugins and their types in timeline.yaml
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

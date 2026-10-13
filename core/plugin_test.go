@@ -46,7 +46,7 @@ func (p decisionsPlugin) Validate(in PluginInput) ([]Diagnostic, error) {
 
 func pluginConfig() *Config {
 	cfg := testConfig()
-	cfg.Types = append(cfg.Types, TypeDef{Name: "decision", Folder: "decisions", Timing: Past,
+	cfg.Types = append(cfg.Types, TypeDef{Name: "decision", Folder: "decisions", Timing: Past, Plugin: "decisions", Base: "decision",
 		Status: &StatusDef{Values: []string{"current", "superseded"}, Closed: []string{"superseded"}}})
 	return cfg
 }
@@ -212,5 +212,31 @@ func TestPastDue(t *testing.T) {
 		if got := PastDue(&tc.typ, tc.doc, tc.when, testNow); got != tc.want {
 			t.Errorf("%s: PastDue = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestValidatorSeesTypesThatListIt(t *testing.T) {
+	cfg := pluginConfig()
+	for i := range cfg.Types {
+		if cfg.Types[i].Name == "news" {
+			cfg.Types[i].Validators = []string{"decisions"}
+		}
+	}
+	var seen PluginInput
+	news := Document{Path: "news/n.md", Fields: []Field{
+		str("type", "news"), stamp("timeline_at", "2026-10-01T13:00:00Z"), str("created_by", "a"), str("ticker", "X"),
+	}}
+	mustCheck(t, CheckInput{
+		Config:  cfg,
+		Docs:    []Document{news, decisionDoc("decisions/d.md", "current"), stepTask},
+		Now:     testNow,
+		Plugins: []Plugin{decisionsPlugin{seen: &seen}},
+	})
+	var paths []string
+	for _, e := range seen.Events {
+		paths = append(paths, e.Path)
+	}
+	if strings.Join(paths, ",") != "decisions/d.md,news/n.md" {
+		t.Errorf("plugin saw %v; want its own type and the type listing it as a validator", paths)
 	}
 }

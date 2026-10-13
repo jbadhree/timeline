@@ -63,16 +63,20 @@ Built-in plugins are Go packages compiled into `tline` that implement the core i
 ### Configuration
 
 ```yaml
-plugins:
-  - goals                         # built in
-  - ticker: { run: ./tools/check-ticker }   # external
+plugins: [goals]                    # the plugins this timeline uses
 types:
   goal: { from: goals/goal, folder: goals }
+  objective: { from: goals/goal, folder: objectives }   # a second, renamed goal type
   task: { from: goals/task, folder: tasks }
   prediction:
     folder: predictions
     entry_timing: future
-    validators: [ticker]
+    validators: [ticker]            # another plugin's rules on a configured type
 ```
+
+- `plugins` lists the plugins a timeline uses; only those run, and a listed plugin that `tline` does not have is an error. Without the list, every built-in plugin is used, so older roots keep working. A plugin that is not listed leaves its type names free for ordinary configured types, and its commands refuse to run in that timeline.
+- `from: plugin/type` builds a type from a plugin's template. The type may have any name, and several types may share one template; the plugin's rules follow the template (`TypeDef.Base`), not the name. Without `from`, a type named like a type of a used plugin is built from it, as in `goal: { folder: goals }`; if two used plugins provide that name, `from` must choose.
+- `validators` adds the rules of other used plugins to a type; those plugins then receive its events.
+- External plugins, written as `- name: { run: ./path }`, are rejected until the external protocol exists.
 
 A plugin depending on another plugin's types reads only that plugin's facts, never its meaning. Versioned plugin names and the protocol version keep this stable. WebAssembly plugins are a possible later option if untrusted plugins ever matter.

@@ -37,8 +37,12 @@ type Plugin struct{}
 // New returns the goals plugin.
 func New() Plugin { return Plugin{} }
 
+// pluginName is the name timelines use in their plugins list and in
+// "from: goals/goal".
+const pluginName = "goals"
+
 // Name implements core.Plugin.
-func (Plugin) Name() string { return "goals" }
+func (Plugin) Name() string { return pluginName }
 
 // Types implements core.TypeProvider: the goal and task templates. A root
 // chooses their folders and may add fields and sections.
@@ -84,12 +88,10 @@ func (Plugin) Validate(in core.PluginInput) ([]core.Diagnostic, error) {
 	return c.diags, nil
 }
 
-func isGoalOrTask(typeName string) bool { return typeName == Goal || typeName == Task }
-
 // checkSections requires the answers that live in sections.
 func (c *checker) checkSections(n *node) {
 	d, p := n.ev.Doc, n.ev.Path
-	switch n.ev.Type.Name {
+	switch n.kind() {
 	case Goal:
 		c.requireItems(p, d, SectionHow, "must list at least one step")
 		c.requireItems(p, d, SectionDoneWhen, "must list at least one criterion")
@@ -139,15 +141,15 @@ func (c *checker) checkSteps(n *node) {
 			switch {
 			case l.Broken:
 				broken = true
-			case isGoalOrTask(l.ToType) && n.ev.Type.Name == Task:
+			case c.isGoalOrTask(l.ToType) && n.kind() == Task:
 				c.add(core.Diagnostic{Path: n.ev.Path, Line: l.Line, Section: SectionHow, Message: fmt.Sprintf("a task's steps must not link to a %s (%s); make this task a goal instead", l.ToType, l.To)})
-			case isGoalOrTask(l.ToType):
+			case c.isGoalOrTask(l.ToType):
 				linked = true
 			}
 		}
 		// A broken link is already reported by the core; do not also call
 		// the step unlinked.
-		if n.ev.Type.Name == Goal && !linked && !broken {
+		if n.kind() == Goal && !linked && !broken {
 			c.add(core.Diagnostic{Path: n.ev.Path, Line: item.Line, Section: SectionHow, Message: fmt.Sprintf("step %q must link to a goal or task", firstLine(item.Text))})
 		}
 	}
@@ -202,7 +204,7 @@ func (c *checker) checkCycles() {
 		state[n] = done
 	}
 	for _, n := range c.order {
-		if n.ev.Type.Name == Goal && state[n] == unvisited {
+		if n.kind() == Goal && state[n] == unvisited {
 			visit(n)
 		}
 	}

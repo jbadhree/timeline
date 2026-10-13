@@ -155,7 +155,7 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		return usageError(stderr, "check: "+err.Error())
 	}
 
-	in := core.CheckInput{Config: cfg, Docs: docs, Selected: selected, Now: clock(), Plugins: plugins()}
+	in := core.CheckInput{Config: cfg, Docs: docs, Selected: selected, Now: clock(), Plugins: enabledPlugins(cfg)}
 	res, err := core.Check(in)
 	if err == nil && !*dryRun && res.Valid() {
 		// The entry time is read after validation, immediately before
@@ -193,9 +193,25 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 	return renderCheck(stdout, stderr, opts.JSON, out, "")
 }
 
-// plugins returns the plugins tline runs: the built-in goals plugin. Plugins
-// named in timeline.yaml come with the plugin configuration task.
+// plugins returns the plugins tline can run: the built-in goals plugin. Each
+// timeline chooses which of them it uses; see enabledPlugins.
 var plugins = builtinPlugins
+
+// enabledPlugins returns the available plugins the timeline's configuration
+// enables, in configuration order.
+func enabledPlugins(cfg *core.Config) []core.Plugin {
+	byName := map[string]core.Plugin{}
+	for _, p := range plugins() {
+		byName[p.Name()] = p
+	}
+	var out []core.Plugin
+	for _, name := range cfg.Plugins {
+		if p, ok := byName[name]; ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 func builtinPlugins() []core.Plugin { return []core.Plugin{goals.New()} }
 

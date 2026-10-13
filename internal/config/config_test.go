@@ -157,16 +157,111 @@ func (badTemplates) Types() []core.TypeDef {
 }
 
 func TestPluginTemplateProblems(t *testing.T) {
-	_, err := Decode([]byte("version: 1\ntypes: {}\n"), []core.Plugin{templates{}, badTemplates{name: "other"}})
+	_, err := Decode([]byte("version: 1\ntypes:\n  goal: { folder: goals }\n"), []core.Plugin{templates{}, badTemplates{name: "other"}})
 	if err == nil {
 		t.Fatal("want an error")
 	}
 	for _, want := range []string{
-		`type "goal" is provided by both plugin fake and plugin other`,
+		`type "goal" is provided by both plugin fake and plugin other; use from: to choose one`,
 		`plugin other provides type "broken" without a valid name and timing rule`,
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+}
+
+// validating is a stand-in plugin with rules but no types.
+type validating struct{}
+
+func (validating) Name() string { return "lint" }
+func (validating) Validate(core.PluginInput) ([]core.Diagnostic, error) {
+	return nil, nil
+}
+
+func TestPluginsList(t *testing.T) {
+	all := []core.Plugin{templates{}, validating{}}
+
+	cfg, err := Decode([]byte("version: 1\ntypes:\n  goal: { folder: goals }\n"), all)
+	if err != nil || strings.Join(cfg.Plugins, ",") != "fake,lint" {
+		t.Fatalf("without a list every plugin is enabled: %v %v", cfg, err)
+	}
+
+	cfg, err = Decode([]byte("version: 1\nplugins: [lint]\ntypes:\n  goal: { folder: goals, entry_timing: past }\n"), all)
+	if err != nil || strings.Join(cfg.Plugins, ",") != "lint" {
+		t.Fatalf("with a list only those plugins are enabled: %v %v", cfg, err)
+	}
+	if g, _ := cfg.TypeByName("goal"); g.Plugin != "" || g.Timing != core.Past {
+		t.Errorf("a disabled plugin's type name is free for a configured type: %+v", g)
+	}
+
+	for _, tc := range []struct{ yaml, want string }{
+		{"plugins: [nope]", `unknown plugin "nope" (available: fake, lint)`},
+		{"plugins: [fake, fake]", `plugin "fake" is listed twice`},
+		{"plugins: [{ ticker: { run: ./check } }]", "external plugins are not supported yet"},
+		{"plugins: fake", "plugins must be a list"},
+	} {
+		_, err := Decode([]byte("version: 1\n"+tc.yaml+"\ntypes: {}\n"), all)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %v, want %q", tc.yaml, err, tc.want)
+		}
+	}
+}
+
+func TestFromAndRenamedPluginTypes(t *testing.T) {
+	cfg, err := Decode([]byte(`version: 1
+types:
+  goal: { folder: goals }
+  objective: { from: fake/goal, folder: objectives, sections: [Risks] }
+`), plugins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj, _ := cfg.TypeByName("objective")
+	if obj.Plugin != "fake" || obj.Base != "goal" || obj.Timing != core.Future || len(obj.Sections) != 1 {
+		t.Errorf("objective = %+v", obj)
+	}
+	if g, _ := cfg.TypeByName("goal"); g.Base != "goal" {
+		t.Errorf("short form goal = %+v", g)
+	}
+
+	for _, tc := range []struct{ yaml, want string }{
+		{"plugins: []\ntypes:\n  goal: { from: fake/goal, folder: goals }", "plugin fake is not enabled; add it to plugins"},
+		{"types:\n  goal: { from: fake/nothing, folder: goals }", `from "fake/nothing" does not name a plugin type`},
+		{"types:\n  goal: { from: fake/goal, folder: goals, entry_timing: past }", `unknown key "entry_timing"`},
+	} {
+		_, err := Decode([]byte("version: 1\n"+tc.yaml+"\n"), plugins)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %v, want %q", tc.yaml, err, tc.want)
+		}
+	}
+}
+
+func TestFromResolvesAmbiguity(t *testing.T) {
+	both := []core.Plugin{templates{}, badTemplates{name: "other"}}
+	_, err := Decode([]byte("version: 1\nplugins: [fake, other]\ntypes:\n  goal: { from: other/goal, folder: goals }\n"), both)
+	if err == nil || strings.Contains(err.Error(), "provided by both") {
+		t.Fatalf("from: should resolve the ambiguity (the other error is the bad template): %v", err)
+	}
+}
+
+func TestValidators(t *testing.T) {
+	all := []core.Plugin{templates{}, validating{}}
+	cfg, err := Decode([]byte("version: 1\ntypes:\n  news: { folder: news, entry_timing: past, validators: [lint] }\n"), all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := cfg.TypeByName("news"); strings.Join(n.Validators, ",") != "lint" {
+		t.Errorf("news = %+v", n)
+	}
+	for _, tc := range []struct{ yaml, want string }{
+		{"types:\n  news: { folder: news, entry_timing: past, validators: [nope] }", `unknown validator plugin "nope"`},
+		{"plugins: [fake]\ntypes:\n  news: { folder: news, entry_timing: past, validators: [lint] }", "plugin lint is not enabled"},
+		{"types:\n  news: { folder: news, entry_timing: past, validators: [fake] }", "plugin fake has no validation rules"},
+	} {
+		_, err := Decode([]byte("version: 1\n"+tc.yaml+"\n"), all)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %v, want %q", tc.yaml, err, tc.want)
 		}
 	}
 }

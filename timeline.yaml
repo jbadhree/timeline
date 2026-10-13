@@ -4,11 +4,11 @@
 version: 1
 name: timeline
 
+plugins: [goals] # built into tline
+
 types:
-  goal:
-    folder: goals # from the built-in goals plugin
-  task:
-    folder: tasks # from the built-in goals plugin
+  goal: { from: goals/goal, folder: goals }
+  task: { from: goals/task, folder: tasks }
 
   decision:
     folder: decisions

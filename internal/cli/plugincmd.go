@@ -113,13 +113,16 @@ func runPluginCommand(ctx context.Context, opts Options, pc pluginCommand, args 
 		diagnose(stderr, "reading %s: %v", config.FileName, err)
 		return ExitFailure
 	}
+	if !cfg.UsesPlugin(pc.plugin.Name()) {
+		return usageError(stderr, fmt.Sprintf("%s: the %s plugin is not enabled in %s; add it to plugins", pc.cmd.Name, pc.plugin.Name(), config.FileName))
+	}
 	docs, _, err := document.Scan(ctx, root, cfg)
 	if err != nil {
 		diagnose(stderr, "%v", err)
 		return ExitFailure
 	}
 
-	out, err := core.RunCommand(ctx, core.CheckInput{Config: cfg, Docs: docs, Now: clock(), Plugins: plugins()}, pc.plugin, pc.cmd, rest, opts.JSON)
+	out, err := core.RunCommand(ctx, core.CheckInput{Config: cfg, Docs: docs, Now: clock(), Plugins: enabledPlugins(cfg)}, pc.plugin, pc.cmd, rest, opts.JSON)
 	if err != nil {
 		var uerr core.UsageError
 		if errors.As(err, &uerr) {

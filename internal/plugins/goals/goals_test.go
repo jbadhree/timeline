@@ -1,6 +1,7 @@
 package goals_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -225,5 +226,42 @@ func TestExtraConfiguredFieldsAndSections(t *testing.T) {
 		if !strings.Contains(all, w) {
 			t.Errorf("missing %q in:\n%s", w, all)
 		}
+	}
+}
+
+func TestRenamedGoalTypesKeepTheirRules(t *testing.T) {
+	plugins := []core.Plugin{goals.New()}
+	cfg, err := config.Decode([]byte(`version: 1
+types:
+  goal: { folder: goals }
+  objective: { from: goals/goal, folder: objectives }
+  chore: { from: goals/task, folder: chores }
+`), plugins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	objective := strings.Replace(goalMD("- [Sweep](../chores/sweep.md)\n- Plain step"), "type: goal\n", "type: objective\n", 1)
+	objective = strings.Replace(objective, "goal: Ship it\n", "goal: Keep the floor clean\n", 1)
+	chore := strings.Replace(taskMD("\n## How\n\n- Sweep.\n"), "type: task\n", "type: chore\n", 1)
+	chore = strings.Replace(chore, "task: List files\n", "task: Sweep the floor\n", 1)
+	res, err := core.Check(core.CheckInput{Config: cfg, Now: now, Plugins: plugins, Docs: []core.Document{
+		document.Parse("goals/g.md", []byte(goalMD("- [Objective](../objectives/o.md)"))),
+		document.Parse("objectives/o.md", []byte(objective)),
+		document.Parse("chores/sweep.md", []byte(chore)),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The objective is a goal: its plain step must link, and it is a child
+	// of goals/g.md; the chore is a task with an inherited why.
+	want(t, res, `objectives/o.md: step "Plain step" must link to a goal or task`)
+
+	out, err := core.RunCommand(context.Background(), core.CheckInput{Config: cfg, Now: now, Plugins: plugins, Docs: []core.Document{
+		document.Parse("goals/g.md", []byte(goalMD("- [Objective](../objectives/o.md)"))),
+		document.Parse("objectives/o.md", []byte(strings.Replace(objective, "\n- Plain step", "", 1))),
+		document.Parse("chores/sweep.md", []byte(chore)),
+	}}, goals.New(), goals.New().Commands()[0], []string{"tree"}, false)
+	if err != nil || !strings.Contains(out.Text, "└─ [open] Keep the floor clean") || !strings.Contains(out.Text, "└─ [open] Sweep the floor") {
+		t.Errorf("tree over renamed types:\n%s (%v)", out.Text, err)
 	}
 }

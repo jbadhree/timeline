@@ -68,7 +68,7 @@ types:
 - `fields` declare the type-specific frontmatter. Field types are `string`, `number`, `bool`, `time` (RFC 3339), and `list` with an `items` scalar type. `values` restricts a scalar or list item to listed values. `required` defaults to false.
 - `sections` lists `##` headings the body must contain. It is optional.
 - `status` is optional. It lists a type's allowed `status` values and which are `closed`. A type with `status` requires a `status` field in every event. See [past due](two-times-and-timing.md#past-due).
-- The type names `goal` and `task` are reserved for the [goals plugin](goals-and-tasks.md), which is built in. A root enables each by declaring it, chooses its folder, and may add `fields` and `sections`; the built-in fields, sections, timing rule, and statuses cannot be removed or redefined.
+- `plugins` lists the plugins the timeline uses, and a type can be built from a plugin's template with `from: plugin/type`, such as `goal: { from: goals/goal, folder: goals }`; see [plugins](plugins.md#configuration). A type named like a used plugin's type, such as `goal`, is built from it even without `from`. A root enables each by declaring it, chooses its folder, and may add `fields` and `sections`; the built-in fields, sections, timing rule, and statuses cannot be removed or redefined.
 - A type cannot redefine the shared fields below. Each folder belongs to one type.
 - Frontmatter fields that are neither shared nor declared are errors.
 

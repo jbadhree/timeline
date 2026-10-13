@@ -83,7 +83,7 @@ func RunCommand(ctx context.Context, in CheckInput, p Plugin, cmd Command, args 
 	if err != nil {
 		return CommandOutput{}, err
 	}
-	facts, owned := v.pluginInput(pluginTypes(p))
+	facts, owned := v.pluginInput(pluginTypes(v.in.Config, p))
 	cin := CommandInput{PluginInput: facts, Args: args, JSON: asJSON, Diagnostics: []Diagnostic{}}
 	for _, d := range res.Diagnostics {
 		if owned[d.Path] {
@@ -138,11 +138,12 @@ type ResolvedLink struct {
 	Broken bool
 }
 
-// pluginTypes returns the names of the types a plugin provides.
-func pluginTypes(p Plugin) map[string]bool {
+// pluginTypes returns the names of the configured types a plugin sees: those
+// built from its templates and those that list it as a validator.
+func pluginTypes(cfg *Config, p Plugin) map[string]bool {
 	names := map[string]bool{}
-	if tp, ok := p.(TypeProvider); ok {
-		for _, t := range tp.Types() {
+	for _, t := range cfg.Types {
+		if t.Plugin == p.Name() || contains(t.Validators, p.Name()) {
 			names[t.Name] = true
 		}
 	}
@@ -163,7 +164,7 @@ func (v *validator) runPlugins() error {
 		if !ok {
 			continue
 		}
-		in, owned := v.pluginInput(pluginTypes(p))
+		in, owned := v.pluginInput(pluginTypes(v.in.Config, p))
 		diags, err := val.Validate(in)
 		if err != nil {
 			return fmt.Errorf("plugin %s: %w", p.Name(), err)
