@@ -10,6 +10,6 @@ Start at the [primary goal](goals/primary-goal-build-timeline.md). It explains w
 - Preserve existing user work and unrelated staged changes. Keep dependencies modest and language simple.
 - Add application code only when implementation is requested.
 - Change behavior by editing the goal that owns it, or adding a goal or task linked from a parent's `## How`. Keep its `## Design` and `## Done when` in agreement; `## Done when` is what tests must demonstrate.
-- Ship tests, lint, and CI with the first code. Every behavior arrives with unit, integration, and end-to-end tests of the built `tline` binary.
+- Every behavior arrives with unit, integration, and end-to-end tests of the built `tline` binary. Run `make check` (and `make race` for concurrent code) before pushing; never weaken a check to make it pass.
 
 For documentation changes, verify local links and whitespace. Report actual checks and limitations; do not claim tooling, passing tests, or benchmark results exist before they do.

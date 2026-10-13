@@ -12,8 +12,19 @@ This repository plans and designs Timeline as Timeline goals and tasks. Start at
 - [`tasks/`](tasks/): concrete steps whose result is obvious.
 - [`examples/`](examples/README.md): worked configuration and event files.
 
+## Development
+
+Requires Go (the `toolchain` line in `go.mod` downloads the pinned version automatically), Git, and Make, on macOS or Linux. No credentials or global configuration are needed.
+
+```sh
+make check   # format, CGO-free build, lint, unit and end-to-end tests
+make race    # tests with the race detector
+```
+
+`make check` installs the pinned golangci-lint into `bin/` on first run. CI runs both targets on macOS and Linux for every push to `main` and every pull request.
+
 ## Status
 
-Application code has not been written. The planned Go executable is `tline`, with `check`, `list`, `history`, `goal`, and `task` commands backed by a reusable core. `check` records events in Git commits; every command reads the files and Git directly, with no database.
+Only the `tline` shell exists so far: `--help`, `--version`, `--root`, and `--json`. The planned Go executable is `tline`, with `check`, `list`, `history`, `goal`, and `task` commands backed by a reusable core. `check` records events in Git commits; every command reads the files and Git directly, with no database.
 
 Applications keep their own configuration, events, and domain logic and use an installed `tline` binary. Read [AGENTS.md](AGENTS.md) before making changes.

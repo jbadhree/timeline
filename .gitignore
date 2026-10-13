@@ -7,3 +7,6 @@
 
 # Runtime state such as the writer lock.
 /.tline/
+
+# Pinned developer tools installed by the Makefile.
+/bin/
