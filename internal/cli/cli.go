@@ -16,6 +16,7 @@ const (
 	ExitFailure    = 1 // operational failure, such as an unwritable output stream
 	ExitUsage      = 2 // invalid flags, arguments, or command
 	ExitValidation = 3 // files or configuration failed validation
+	ExitConflict   = 4 // another check holds the lock, or a file changed during the check
 )
 
 // Version is the release version. Release builds set it with
@@ -44,7 +45,7 @@ Flags:
   --help          print this help and exit
 
 Commands:
-  check           validate event files (only --dry-run so far)
+  check           validate event files and stamp new drafts
   help            print this help
 
 Run 'tline check --help' for check's flags.

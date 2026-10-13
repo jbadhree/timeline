@@ -11,6 +11,8 @@ package document
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -18,16 +20,23 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jbadhree/timeline/core"
 	"go.yaml.in/yaml/v3"
 )
 
+// Snapshot records the content hash of each scanned file, keyed by
+// root-relative path, so a writer can tell whether a file changed after it
+// was validated.
+type Snapshot map[string][sha256.Size]byte
+
 // Scan reads every Markdown file under the configured type folders of root.
 // A missing folder is treated as empty. Hidden files and directories are
 // skipped. Results are sorted by path.
-func Scan(ctx context.Context, root string, cfg *core.Config) ([]core.Document, error) {
+func Scan(ctx context.Context, root string, cfg *core.Config) ([]core.Document, Snapshot, error) {
 	var docs []core.Document
+	snap := Snapshot{}
 	for _, t := range cfg.Types {
 		dir := filepath.Join(root, filepath.FromSlash(t.Folder))
 		err := filepath.WalkDir(dir, func(p string, entry fs.DirEntry, err error) error {
@@ -57,15 +66,17 @@ func Scan(ctx context.Context, root string, cfg *core.Config) ([]core.Document, 
 			if err != nil {
 				return err
 			}
-			docs = append(docs, Parse(filepath.ToSlash(rel), data))
+			rel = filepath.ToSlash(rel)
+			docs = append(docs, Parse(rel, data))
+			snap[rel] = sha256.Sum256(data)
 			return nil
 		})
 		if err != nil {
-			return nil, fmt.Errorf("scanning %s: %w", t.Folder, err)
+			return nil, nil, fmt.Errorf("scanning %s: %w", t.Folder, err)
 		}
 	}
 	sort.Slice(docs, func(i, j int) bool { return docs[i].Path < docs[j].Path })
-	return docs, nil
+	return docs, snap, nil
 }
 
 // Parse decodes one event file. Problems that prevent decoding are returned
@@ -252,3 +263,80 @@ func findLinks(text string, line int) []core.Link {
 	}
 	return links
 }
+
+// Stamp is what tline check writes into a draft when it records it.
+type Stamp struct {
+	ID          string
+	EnteredAt   time.Time
+	EntryTiming core.TimingRule
+}
+
+// InsertStamp returns data with the stamp's id, entered_at, and entry_timing
+// inserted as the first frontmatter lines. Every other byte is unchanged, and
+// the file's line ending (LF or CRLF) is kept.
+func InsertStamp(data []byte, s Stamp) ([]byte, error) {
+	nl := bytes.IndexByte(data, '\n')
+	if nl < 0 || strings.TrimRight(string(data[:nl]), " \t\r") != "---" {
+		return nil, errors.New("file does not start with frontmatter")
+	}
+	eol := "\n"
+	if nl > 0 && data[nl-1] == '\r' {
+		eol = "\r\n"
+	}
+	stamp := "id: " + s.ID + eol +
+		"entered_at: " + s.EnteredAt.UTC().Format(time.RFC3339) + eol +
+		"entry_timing: " + string(s.EntryTiming) + eol
+	out := make([]byte, 0, len(data)+len(stamp))
+	out = append(out, data[:nl+1]...)
+	out = append(out, stamp...)
+	out = append(out, data[nl+1:]...)
+	return out, nil
+}
+
+// Rewrite replaces the file at path with data, but only if its current
+// content still hashes to want. It writes a temporary file in the same
+// directory and renames it over the original, keeping the file mode, so
+// readers see either the old or the new file, never a partial one.
+func Rewrite(path string, want [sha256.Size]byte, data []byte) error {
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if sha256.Sum256(current) != want {
+		return ErrChanged
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tline-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := func(err error) error {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return cleanup(err)
+	}
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		return cleanup(err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return cleanup(err)
+	}
+	if err := tmp.Close(); err != nil {
+		return cleanup(err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
+}
+
+// ErrChanged means a file changed after it was validated.
+var ErrChanged = errors.New("file changed after it was validated")

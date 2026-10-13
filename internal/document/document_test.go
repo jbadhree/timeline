@@ -2,9 +2,12 @@ package document
 
 import (
 	"context"
+	"crypto/sha256"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jbadhree/timeline/core"
 )
@@ -119,12 +122,15 @@ func TestScan(t *testing.T) {
 		{Name: "goal", Folder: "goals"},
 		{Name: "task", Folder: "tasks"}, // missing folder is empty
 	}}
-	docs, err := Scan(context.Background(), root, cfg)
+	docs, snap, err := Scan(context.Background(), root, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(docs) != 2 || docs[0].Path != "goals/b.md" || docs[1].Path != "goals/sub/a.md" {
 		t.Errorf("docs = %+v", docs)
+	}
+	if len(snap) != 2 || snap["goals/b.md"] != sha256.Sum256([]byte("---\ntype: goal\n---\n")) {
+		t.Errorf("snapshot = %v", snap)
 	}
 }
 
@@ -150,5 +156,51 @@ func TestSectionLinksIncludeProse(t *testing.T) {
 	why, ok := d.Section("Why")
 	if !ok || len(why.Links) != 2 || why.Links[0].Target != "../decisions/d.md" || why.Links[0].Line != 7 {
 		t.Errorf("Why links = %+v", why)
+	}
+}
+
+func TestInsertStamp(t *testing.T) {
+	s := Stamp{ID: "01M3VW7KR0FFWVGBE1D5GYN31R", EnteredAt: time.Date(2026, 10, 13, 6, 0, 0, 0, time.UTC), EntryTiming: core.Future}
+	for name, tc := range map[string]struct{ in, want string }{
+		"lf": {
+			"---\ntype: task\n---\n\nBody stays   exactly.\n",
+			"---\nid: 01M3VW7KR0FFWVGBE1D5GYN31R\nentered_at: 2026-10-13T06:00:00Z\nentry_timing: future\ntype: task\n---\n\nBody stays   exactly.\n",
+		},
+		"crlf": {
+			"---\r\ntype: task\r\n---\r\n",
+			"---\r\nid: 01M3VW7KR0FFWVGBE1D5GYN31R\r\nentered_at: 2026-10-13T06:00:00Z\r\nentry_timing: future\r\ntype: task\r\n---\r\n",
+		},
+	} {
+		got, err := InsertStamp([]byte(tc.in), s)
+		if err != nil || string(got) != tc.want {
+			t.Errorf("%s: got %q, %v", name, got, err)
+		}
+	}
+	if _, err := InsertStamp([]byte("no frontmatter\n"), s); err == nil {
+		t.Error("want an error without frontmatter")
+	}
+}
+
+func TestRewrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "e.md")
+	orig := []byte("---\ntype: task\n---\n")
+	if err := os.WriteFile(path, orig, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := Rewrite(path, sha256.Sum256(orig), []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	info, _ := os.Stat(path)
+	if string(got) != "new" || info.Mode().Perm() != 0o640 {
+		t.Errorf("content %q mode %v", got, info.Mode().Perm())
+	}
+	// The file no longer matches the original hash: refuse to overwrite.
+	if err := Rewrite(path, sha256.Sum256(orig), []byte("newer")); !errors.Is(err, ErrChanged) {
+		t.Errorf("want ErrChanged, got %v", err)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(path))
+	if len(entries) != 1 {
+		t.Errorf("temporary files left behind: %v", entries)
 	}
 }

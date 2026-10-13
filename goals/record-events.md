@@ -51,9 +51,11 @@ Recorded events can be edited, moved, or removed like any file. Each check valid
 
 ### Stamping a check
 
-1. Take the writer lock for the root (`.tline/lock`), so only one check stamps at a time across processes.
+1. Take the writer lock for the root (`.tline/lock`), so only one check stamps at a time across processes. Wait up to 10 seconds, then report a conflict (exit 4). A dry run never takes the lock.
 2. Scan and validate the selected files and root-wide rules. Stop on any failure.
-3. Read the entry time once from the clock, after validation succeeds.
-4. For each draft: re-read it, confirm it still has the content that was validated, then write it with its stamps through a temporary file and rename. Stop at the first file that changed and report it; files already stamped are complete recorded events, and the rest stay drafts.
+3. Read the entry time once from the clock, after validation succeeds, and validate again against it, so a Future draft whose time passed during validation is rejected.
+4. For each draft: re-read it, confirm it still has the content that was validated, then write it with its stamps through a temporary file and rename. Stop at the first file that changed and report a conflict (exit 4); files already stamped are complete recorded events, and the rest stay drafts.
+
+IDs are ULIDs built from the entry time and 80 random bits. A crashed check can leave `.tline/lock` behind; the conflict message names the file to delete once no check is running.
 
 `created_by` stays the event's own attribution label; it is not an authenticated identity.

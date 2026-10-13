@@ -2,9 +2,11 @@ package e2e
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -54,7 +56,7 @@ func TestCheckDryRunValidRoot(t *testing.T) {
 	if r.code != 0 || r.stderr != "" {
 		t.Fatalf("got %+v", r)
 	}
-	if !strings.Contains(r.stdout, "checked 3 events (2 drafts, 1 recorded): all valid. Nothing was recorded.") {
+	if !strings.Contains(r.stdout, "checked 3 events (2 drafts, 1 recorded): all valid. Nothing was written.") {
 		t.Errorf("stdout = %q", r.stdout)
 	}
 }
@@ -151,7 +153,6 @@ func TestCheckUsageAndConfigErrors(t *testing.T) {
 		inStderr string
 		inStdout string
 	}{
-		{"stamping not implemented", valid, []string{"check"}, 2, "stamping drafts is not implemented yet", ""},
 		{"no root", t.TempDir(), []string{"check", "--dry-run"}, 2, "no timeline.yaml found", ""},
 		{"path outside folders", valid, []string{"check", "--dry-run", "timeline.yaml"}, 2, "not inside a configured type folder", ""},
 		{"path outside root", valid, []string{"check", "--dry-run", ".."}, 2, "outside the Timeline root", ""},
@@ -168,5 +169,138 @@ func TestCheckUsageAndConfigErrors(t *testing.T) {
 				t.Errorf("got %+v", r)
 			}
 		})
+	}
+}
+
+// copyFixture copies a testdata root into a temporary directory so a test can
+// let tline write to it.
+func copyFixture(t *testing.T, name string) string {
+	t.Helper()
+	src := fixture(t, name)
+	dst := t.TempDir()
+	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(src, p)
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dst
+}
+
+func readTree(t *testing.T, root string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(p)
+		rel, _ := filepath.Rel(root, p)
+		files[filepath.ToSlash(rel)] = string(data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func TestCheckStampsThenIsIdempotent(t *testing.T) {
+	root := copyFixture(t, "valid")
+	before := readTree(t, root)
+
+	if r := tline(t, root, "check", "--dry-run"); r.code != 0 {
+		t.Fatalf("dry run: %+v", r)
+	}
+	if after := readTree(t, root); len(after) != len(before) || after["goals/ship.md"] != before["goals/ship.md"] {
+		t.Fatal("dry run changed files")
+	}
+
+	r := tline(t, root, "check", "--json")
+	if r.code != 0 {
+		t.Fatalf("check: %+v", r)
+	}
+	var out struct {
+		Recorded bool `json:"recorded"`
+		Stamped  []struct {
+			Path, ID, EnteredAt string
+		} `json:"stamped"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !out.Recorded || len(out.Stamped) != 2 {
+		t.Fatalf("stamped = %+v", out)
+	}
+	stamped := readTree(t, root)
+	for _, path := range []string{"goals/ship.md", "tasks/list files.md"} {
+		body := strings.TrimPrefix(before[path], "---\n")
+		if !strings.HasPrefix(stamped[path], "---\nid: ") || !strings.HasSuffix(stamped[path], body) {
+			t.Errorf("%s not stamped with the rest unchanged:\n%s", path, stamped[path])
+		}
+	}
+	if stamped["news/recorded.md"] != before["news/recorded.md"] {
+		t.Error("an already recorded event was changed")
+	}
+	if _, ok := stamped[".tline/lock"]; ok {
+		t.Error("lock left behind")
+	}
+
+	r = tline(t, root, "check")
+	if r.code != 0 || !strings.Contains(r.stdout, "(0 drafts, 3 recorded): all valid. No drafts to stamp.") {
+		t.Fatalf("second check: %+v", r)
+	}
+	if after := readTree(t, root); after["goals/ship.md"] != stamped["goals/ship.md"] {
+		t.Error("second check changed a recorded event")
+	}
+}
+
+func TestCheckInvalidRootWritesNothing(t *testing.T) {
+	root := copyFixture(t, "invalid")
+	before := readTree(t, root)
+	if r := tline(t, root, "check"); r.code != 3 || !strings.Contains(r.stdout, "Nothing was stamped.") {
+		t.Fatalf("got %+v", r)
+	}
+	after := readTree(t, root)
+	for path, content := range before {
+		if after[path] != content {
+			t.Errorf("%s changed", path)
+		}
+	}
+}
+
+func TestConcurrentChecksStampEachDraftOnce(t *testing.T) {
+	root := copyFixture(t, "valid")
+	var wg sync.WaitGroup
+	results := make([]result, 4)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = tline(t, root, "check")
+		}(i)
+	}
+	wg.Wait()
+	for i, r := range results {
+		if r.code != 0 {
+			t.Errorf("process %d: %+v", i, r)
+		}
+	}
+	for path, content := range readTree(t, root) {
+		if n := strings.Count(content, "\nid: "); strings.HasSuffix(path, ".md") && n != 1 {
+			t.Errorf("%s has %d id lines:\n%s", path, n, content)
+		}
 	}
 }

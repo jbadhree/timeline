@@ -23,8 +23,8 @@ test:
 race:
 	go test -race ./...
 
-# Validate this repository's own goals and tasks. Not part of `check`: drafts
-# are checked against the current time, so the result changes as dates pass.
+# Validate this repository's own goals, tasks, and decisions without writing.
+# Not part of `check`: drafts are checked against the current time.
 plan:
 	go run ./cmd/tline check --dry-run
 

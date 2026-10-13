@@ -4,7 +4,7 @@ timeline_at: 2026-10-23T23:59:59Z
 created_by: claude
 task: Stamp valid drafts with id, entered_at, and entry_timing
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

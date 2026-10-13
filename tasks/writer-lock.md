@@ -4,7 +4,7 @@ timeline_at: 2026-11-14T23:59:59Z
 created_by: claude
 task: Lock the root and re-read files before stamping
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

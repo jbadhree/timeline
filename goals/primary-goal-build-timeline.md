@@ -80,7 +80,7 @@ Recording and reading are the whole loop, and goals and tasks are views over the
 | `tline goal list`, `goal show`, `goal tree` | Goal views |
 | `tline task list`, `task show` | Task views |
 
-All commands support readable terminal output and `--json` for agents. JSON on stdout stays parseable; incidental logging goes to stderr. Diagnostics identify the file, field or section, and reason. Exit codes distinguish success, validation failure, conflict, incomplete results, usage errors, and operational failure. So far: 0 success, 1 operational failure, 2 usage error, 3 validation failure; all values are provisional until the first release.
+All commands support readable terminal output and `--json` for agents. JSON on stdout stays parseable; incidental logging goes to stderr. Diagnostics identify the file, field or section, and reason. Exit codes distinguish success, validation failure, conflict, incomplete results, usage errors, and operational failure. So far: 0 success, 1 operational failure, 2 usage error, 3 validation failure, 4 conflict (another check holds the lock, or a file changed during the check); all values are provisional until the first release.
 
 ## Not in scope
 

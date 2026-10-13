@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,35 +16,53 @@ import (
 	"github.com/jbadhree/timeline/core"
 	"github.com/jbadhree/timeline/internal/config"
 	"github.com/jbadhree/timeline/internal/document"
+	"github.com/jbadhree/timeline/internal/lock"
 )
 
-// now is the clock; tests replace it.
-var now = time.Now
+// Effects that tests replace.
+var (
+	now         = time.Now
+	entropy     = rand.Reader
+	lockWait    = 10 * time.Second
+	beforeStamp = func(path string) {} // called just before each draft is rewritten
+)
 
 const checkUsage = `Usage:
-  tline check --dry-run [paths...]
+  tline check [--dry-run] [paths...]
 
-Validates event files without changing anything. With no paths, every file
-in the configured folders is checked; with paths (files or folders), only
-those are reported, though rules that span the root, such as duplicate IDs
-and goal links, still consider every file.
+Validates event files and stamps every valid draft: it writes id,
+entered_at, and entry_timing at the top of the draft's frontmatter and
+leaves the rest of the file unchanged. A draft is a file without those
+three fields. Nothing is written unless every selected file is valid.
 
-Stamping is not implemented yet. When it is, a check without --dry-run will
-edit draft files, adding their id, entered_at, and entry_timing.
+With no paths, every file in the configured folders is checked; with paths
+(files or folders), only those are checked and stamped, though rules that
+span the root, such as duplicate IDs and links, still consider every file.
 
 Flags:
-  --dry-run   validate only; required until stamping exists
+  --dry-run   validate only; change no files
   --json      machine-readable output on stdout
 `
+
+// stampResult describes one draft that was stamped.
+type stampResult struct {
+	Path        string          `json:"path"`
+	ID          string          `json:"id"`
+	EnteredAt   string          `json:"entered_at"`
+	EntryTiming core.TimingRule `json:"entry_timing"`
+}
 
 // checkOutput is the --json result of check.
 type checkOutput struct {
 	Root        string             `json:"root"`
 	DryRun      bool               `json:"dry_run"`
-	Recorded    bool               `json:"recorded"`
+	Recorded    bool               `json:"recorded"` // true when at least one draft was stamped
 	Valid       bool               `json:"valid"`
 	Events      []core.EventResult `json:"events"`
 	Diagnostics []core.Diagnostic  `json:"diagnostics"`
+	Stamped     []stampResult      `json:"stamped"`
+	// Conflict explains why stamping stopped early, if it did.
+	Conflict string `json:"conflict,omitempty"`
 }
 
 func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr io.Writer) int {
@@ -70,10 +89,6 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 	}
 	opts.JSON = opts.JSON || *asJSON
 
-	if !*dryRun {
-		return usageError(stderr, "check: stamping drafts is not implemented yet; run 'tline check --dry-run' to validate without changing files")
-	}
-
 	cwd, err := os.Getwd()
 	if err != nil {
 		diagnose(stderr, "finding working directory: %v", err)
@@ -88,7 +103,25 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		return ExitFailure
 	}
 
-	out := checkOutput{Root: root, DryRun: true, Events: []core.EventResult{}, Diagnostics: []core.Diagnostic{}}
+	out := checkOutput{Root: root, DryRun: *dryRun, Events: []core.EventResult{}, Diagnostics: []core.Diagnostic{}, Stamped: []stampResult{}}
+
+	if !*dryRun {
+		release, err := lock.Acquire(ctx, filepath.Join(root, ".tline", "lock"), lockWait)
+		if err != nil {
+			if errors.Is(err, lock.ErrHeld) {
+				out.Conflict = err.Error()
+				return renderCheck(stdout, stderr, opts.JSON, out, "")
+			}
+			diagnose(stderr, "taking the writer lock: %v", err)
+			return ExitFailure
+		}
+		defer func() {
+			if err := release(); err != nil {
+				diagnose(stderr, "releasing the writer lock: %v", err)
+			}
+		}()
+	}
+
 	cfg, err := config.Load(root)
 	if err != nil {
 		var cerr *config.Error
@@ -100,7 +133,7 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		return renderCheck(stdout, stderr, opts.JSON, out, config.FileName+" is invalid; no events were checked.")
 	}
 
-	docs, err := document.Scan(ctx, root, cfg)
+	docs, snap, err := document.Scan(ctx, root, cfg)
 	if err != nil {
 		diagnose(stderr, "%v", err)
 		return ExitFailure
@@ -110,15 +143,72 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		return usageError(stderr, "check: "+err.Error())
 	}
 
-	res := core.Check(core.CheckInput{
-		Config:   cfg,
-		Docs:     docs,
-		Selected: selected,
-		Now:      now().UTC().Truncate(time.Second),
-	})
-	out.Events, out.Diagnostics = res.Events, res.Diagnostics
-	out.Valid = res.Valid()
+	in := core.CheckInput{Config: cfg, Docs: docs, Selected: selected, Now: clock()}
+	res := core.Check(in)
+	if !*dryRun && res.Valid() {
+		// The entry time is read after validation, immediately before
+		// writing. Recheck against it, so a Future draft whose time passed
+		// during validation is not recorded.
+		in.Now = clock()
+		res = core.Check(in)
+	}
+	out.Events, out.Diagnostics, out.Valid = res.Events, res.Diagnostics, res.Valid()
+	if *dryRun || !out.Valid {
+		return renderCheck(stdout, stderr, opts.JSON, out, "")
+	}
+
+	for _, e := range res.Events {
+		if !e.Draft {
+			continue
+		}
+		stamped, conflict, err := stampDraft(root, cfg, snap, e, in.Now)
+		if err != nil {
+			diagnose(stderr, "stamping %s: %v", e.Path, err)
+			renderCheck(stdout, stderr, opts.JSON, out, "")
+			return ExitFailure
+		}
+		if conflict != "" {
+			out.Conflict = conflict
+			break
+		}
+		out.Stamped = append(out.Stamped, stamped)
+	}
+	out.Recorded = len(out.Stamped) > 0
 	return renderCheck(stdout, stderr, opts.JSON, out, "")
+}
+
+// clock returns the current time at Timeline's whole-second precision.
+func clock() time.Time { return now().UTC().Truncate(time.Second) }
+
+// stampDraft writes the stamps into one validated draft. A non-empty conflict
+// means the file changed after validation and was left alone.
+func stampDraft(root string, cfg *core.Config, snap document.Snapshot, e core.EventResult, at time.Time) (stampResult, string, error) {
+	t, ok := cfg.TypeByName(e.Type)
+	if !ok {
+		return stampResult{}, "", fmt.Errorf("unknown type %q", e.Type)
+	}
+	id, err := core.NewULID(at, entropy)
+	if err != nil {
+		return stampResult{}, "", err
+	}
+	path := filepath.Join(root, filepath.FromSlash(e.Path))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return stampResult{}, "", err
+	}
+	stamp := document.Stamp{ID: id, EnteredAt: at, EntryTiming: t.Timing}
+	updated, err := document.InsertStamp(data, stamp)
+	if err != nil {
+		return stampResult{}, "", err
+	}
+	beforeStamp(e.Path)
+	if err := document.Rewrite(path, snap[e.Path], updated); err != nil {
+		if errors.Is(err, document.ErrChanged) {
+			return stampResult{}, fmt.Sprintf("%s changed after it was validated; it was not stamped. Run tline check again.", e.Path), nil
+		}
+		return stampResult{}, "", err
+	}
+	return stampResult{Path: e.Path, ID: id, EnteredAt: at.Format(time.RFC3339), EntryTiming: t.Timing}, "", nil
 }
 
 // selectPaths turns path arguments (relative to cwd) into the root-relative
@@ -163,7 +253,10 @@ func selectPaths(root, cwd string, cfg *core.Config, docs []core.Document, args 
 
 func renderCheck(stdout, stderr io.Writer, asJSON bool, out checkOutput, failure string) int {
 	code := ExitOK
-	if len(out.Diagnostics) > 0 {
+	switch {
+	case out.Conflict != "":
+		code = ExitConflict
+	case len(out.Diagnostics) > 0:
 		code = ExitValidation
 	}
 	if asJSON {
@@ -182,11 +275,16 @@ func renderCheck(stdout, stderr io.Writer, asJSON bool, out checkOutput, failure
 	for _, d := range out.Diagnostics {
 		b.WriteString(d.String() + "\n")
 	}
-	if failure != "" {
+	if len(out.Diagnostics) > 0 {
+		b.WriteString("\n")
+	}
+	switch {
+	case failure != "":
 		b.WriteString(failure + "\n")
-	} else {
-		invalid := 0
-		drafts := 0
+	case out.Conflict != "" && len(out.Events) == 0:
+		b.WriteString("Conflict: " + out.Conflict + "\n")
+	default:
+		invalid, drafts := 0, 0
 		for _, e := range out.Events {
 			if !e.Valid {
 				invalid++
@@ -195,16 +293,35 @@ func renderCheck(stdout, stderr io.Writer, asJSON bool, out checkOutput, failure
 				drafts++
 			}
 		}
-		if len(out.Diagnostics) > 0 {
-			b.WriteString("\n")
+		prefix := "Checked"
+		if out.DryRun {
+			prefix = "Dry run: checked"
 		}
-		fmt.Fprintf(&b, "Dry run: checked %d %s (%d %s, %d recorded): ", len(out.Events), plural(len(out.Events), "event", "events"), drafts, plural(drafts, "draft", "drafts"), len(out.Events)-drafts)
-		if invalid == 0 && len(out.Diagnostics) == 0 {
+		fmt.Fprintf(&b, "%s %d %s (%d %s, %d recorded): ", prefix, len(out.Events), plural(len(out.Events), "event", "events"), drafts, plural(drafts, "draft", "drafts"), len(out.Events)-drafts)
+		if len(out.Diagnostics) == 0 {
 			b.WriteString("all valid.")
 		} else {
 			fmt.Fprintf(&b, "%d with problems, %d %s.", invalid, len(out.Diagnostics), plural(len(out.Diagnostics), "problem", "problems"))
 		}
-		b.WriteString(" Nothing was recorded.\n")
+		switch {
+		case out.DryRun:
+			b.WriteString(" Nothing was written.\n")
+		case len(out.Diagnostics) > 0:
+			b.WriteString(" Nothing was stamped.\n")
+		case len(out.Stamped) == 0 && out.Conflict == "":
+			b.WriteString(" No drafts to stamp.\n")
+		default:
+			fmt.Fprintf(&b, " Stamped %d %s:\n", len(out.Stamped), plural(len(out.Stamped), "draft", "drafts"))
+			for _, st := range out.Stamped {
+				fmt.Fprintf(&b, "  %s  %s  %s\n", st.Path, st.ID, st.EntryTiming)
+			}
+			if len(out.Stamped) > 0 {
+				fmt.Fprintf(&b, "Entered at %s.\n", out.Stamped[0].EnteredAt)
+			}
+		}
+		if out.Conflict != "" {
+			b.WriteString("Conflict: " + out.Conflict + "\n")
+		}
 	}
 	if c := writeOut(stdout, stderr, b.String()); c != ExitOK {
 		return c
