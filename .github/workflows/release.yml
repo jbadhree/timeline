@@ -86,3 +86,20 @@ jobs:
             --title "tline ${{ github.ref_name }}" \
             --generate-notes \
             --prerelease
+
+  install:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install the new release with install.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TLINE_VERSION: ${{ github.ref_name }}
+        run: |
+          TLINE_INSTALL_DIR="$RUNNER_TEMP/bin" sh install.sh
+          "$RUNNER_TEMP/bin/tline" --version | grep -F "tline ${{ github.ref_name }}"

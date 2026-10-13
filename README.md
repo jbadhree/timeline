@@ -20,7 +20,15 @@ This repository plans and designs Timeline as Timeline goals and tasks. Start at
 
 ## Install
 
-Releases are published on the [GitHub releases page](https://github.com/jbadhree/timeline/releases) for macOS and Linux, on Intel (`amd64`) and ARM (`arm64`). Download the archive for your platform, check it against `SHA256SUMS`, and put `tline` on your `PATH`:
+On macOS or Linux, install the newest release with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jbadhree/timeline/main/install.sh | sh
+```
+
+[The script](install.sh) downloads the archive for your OS and CPU from the [GitHub releases page](https://github.com/jbadhree/timeline/releases), checks it against `SHA256SUMS`, and installs `tline` into `~/.local/bin` without `sudo`. Set `TLINE_VERSION=v0.2.0` to choose a release, or `TLINE_INSTALL_DIR` to install elsewhere. It tells you if the folder is not on your `PATH`.
+
+To install by hand instead, download the archive for your platform, check it against `SHA256SUMS`, and put `tline` on your `PATH`:
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing

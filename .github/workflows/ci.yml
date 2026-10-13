@@ -22,3 +22,20 @@ jobs:
           go-version-file: go.mod
       - run: make check
       - run: make race
+
+  install-script:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - if: runner.os == 'Linux'
+        run: shellcheck install.sh
+      - name: Install the newest release with install.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TLINE_INSTALL_DIR="$RUNNER_TEMP/bin" sh install.sh
+          "$RUNNER_TEMP/bin/tline" --version
