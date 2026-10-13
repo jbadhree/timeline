@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // decisionsPlugin is a small plugin like one a timeline might write: a
@@ -183,5 +184,33 @@ func TestRunCommandGivesFactsAndOwnDiagnostics(t *testing.T) {
 	}
 	if len(got.Diagnostics) != 1 || got.Diagnostics[0].Path != "decisions/b.md" {
 		t.Errorf("diagnostics = %+v", got.Diagnostics)
+	}
+}
+
+func TestPastDue(t *testing.T) {
+	task := testConfig().Types[1] // Future, statuses open/done
+	news := testConfig().Types[2] // Past, no statuses
+	obs := testConfig().Types[3]  // RealTime with statuses
+	before, after := testNow.Add(-1), testNow.Add(1)
+	withStatus := func(s string) *Document { return &Document{Fields: []Field{str("status", s)}} }
+	for _, tc := range []struct {
+		name string
+		typ  TypeDef
+		doc  *Document
+		when time.Time
+		want bool
+	}{
+		{"open future task whose date passed", task, withStatus("open"), before, true},
+		{"open task not yet due", task, withStatus("open"), after, false},
+		{"due exactly now", task, withStatus("open"), testNow, false},
+		{"done task whose date passed", task, withStatus("done"), before, false},
+		{"task without status", task, &Document{}, before, false},
+		{"task with invalid time", task, withStatus("open"), time.Time{}, false},
+		{"past type", news, withStatus("open"), before, false},
+		{"real-time type with open status", obs, withStatus("open"), before, false},
+	} {
+		if got := PastDue(&tc.typ, tc.doc, tc.when, testNow); got != tc.want {
+			t.Errorf("%s: PastDue = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

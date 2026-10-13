@@ -7,7 +7,7 @@ timeline_at: 2026-12-19T23:59:59Z
 created_by: claude
 task: Implement tline goal list, show, and tree
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

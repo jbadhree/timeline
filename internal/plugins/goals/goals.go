@@ -12,7 +12,6 @@ package goals
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/jbadhree/timeline/core"
@@ -66,17 +65,8 @@ func (Plugin) Types() []core.TypeDef {
 	}
 }
 
-// node is one goal or task in the tree being checked.
-type node struct {
-	ev       core.PluginEvent
-	children []*node
-	parents  []*node
-}
-
 type checker struct {
-	nodes map[string]*node
-	order []*node                        // by path
-	links map[string][]core.ResolvedLink // by From path
+	*model
 	diags []core.Diagnostic
 }
 
@@ -84,20 +74,7 @@ func (c *checker) add(d core.Diagnostic) { c.diags = append(c.diags, d) }
 
 // Validate implements core.Validator.
 func (Plugin) Validate(in core.PluginInput) ([]core.Diagnostic, error) {
-	c := &checker{nodes: map[string]*node{}, links: map[string][]core.ResolvedLink{}}
-	for _, ev := range in.Events {
-		if ev.Doc.ParseErr != nil {
-			continue // already reported by the core
-		}
-		n := &node{ev: ev}
-		c.nodes[ev.Path] = n
-		c.order = append(c.order, n)
-	}
-	sort.Slice(c.order, func(i, j int) bool { return c.order[i].ev.Path < c.order[j].ev.Path })
-	for _, l := range in.Links {
-		c.links[l.From] = append(c.links[l.From], l)
-	}
-
+	c := &checker{model: newModel(in)}
 	for _, n := range c.order {
 		c.checkSections(n)
 		c.checkSteps(n)
@@ -144,18 +121,17 @@ func (c *checker) requireBody(p string, d *core.Document, heading string) {
 	}
 }
 
-// checkSteps applies the How rules: every goal step links to a goal or task,
-// which becomes a child; a task's steps never link to a goal or task.
+// checkSteps applies the How rules: every goal step links to a goal or task;
+// a task's steps never link to a goal or task. The model has already made
+// the linked goals and tasks children.
 func (c *checker) checkSteps(n *node) {
 	how, ok := n.ev.Doc.Section(SectionHow)
 	if !ok {
 		return
 	}
 	byItem := map[int][]core.ResolvedLink{}
-	for _, l := range c.links[n.ev.Path] {
-		if l.Section == SectionHow && l.Item >= 0 {
-			byItem[l.Item] = append(byItem[l.Item], l)
-		}
+	for _, l := range c.stepLinks(n) {
+		byItem[l.Item] = append(byItem[l.Item], l)
 	}
 	for i, item := range how.Items {
 		linked, broken := false, false
@@ -163,16 +139,10 @@ func (c *checker) checkSteps(n *node) {
 			switch {
 			case l.Broken:
 				broken = true
+			case isGoalOrTask(l.ToType) && n.ev.Type.Name == Task:
+				c.add(core.Diagnostic{Path: n.ev.Path, Line: l.Line, Section: SectionHow, Message: fmt.Sprintf("a task's steps must not link to a %s (%s); make this task a goal instead", l.ToType, l.To)})
 			case isGoalOrTask(l.ToType):
-				if n.ev.Type.Name == Task {
-					c.add(core.Diagnostic{Path: n.ev.Path, Line: l.Line, Section: SectionHow, Message: fmt.Sprintf("a task's steps must not link to a %s (%s); make this task a goal instead", l.ToType, l.To)})
-					continue
-				}
 				linked = true
-				if child, ok := c.nodes[l.To]; ok {
-					n.children = append(n.children, child)
-					child.parents = append(child.parents, n)
-				}
 			}
 		}
 		// A broken link is already reported by the core; do not also call

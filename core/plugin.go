@@ -112,6 +112,12 @@ type PluginEvent struct {
 	ID    string // empty for a draft
 	Draft bool
 	Doc   *Document
+	// Time is the event time (timeline_at), or zero if it is missing or
+	// invalid.
+	Time time.Time
+	// PastDue reports whether the event is past due at the input's Now. See
+	// PastDue.
+	PastDue bool
 }
 
 // ResolvedLink is a fact about one link: where it is and what it points to.
@@ -182,7 +188,14 @@ func (v *validator) pluginInput(types map[string]bool) (PluginInput, map[string]
 			continue
 		}
 		owned[e.doc.Path] = true
-		in.Events = append(in.Events, PluginEvent{Path: e.doc.Path, Type: e.typ, ID: e.id, Draft: e.draft, Doc: e.doc})
+		pe := PluginEvent{Path: e.doc.Path, Type: e.typ, ID: e.id, Draft: e.draft, Doc: e.doc}
+		if f, ok := e.doc.Field(FieldTimelineAt); ok {
+			if t, err := parseTimeValue(f.Value); err == nil {
+				pe.Time = t
+			}
+		}
+		pe.PastDue = PastDue(e.typ, e.doc, pe.Time, v.in.Now)
+		in.Events = append(in.Events, pe)
 		in.Links = append(in.Links, v.linksOf(e)...)
 	}
 	return in, owned
@@ -220,4 +233,19 @@ func itemIndex(s Section, l Link) int {
 		}
 	}
 	return -1
+}
+
+// PastDue reports whether an event is past due at now: its type uses the
+// Future rule and has statuses, its status is not closed, and its event time
+// is before now. Only Future events can be past due, because they were
+// expected; past due is computed when reading and never written to files.
+func PastDue(t *TypeDef, doc *Document, eventTime, now time.Time) bool {
+	if t.Timing != Future || t.Status == nil || eventTime.IsZero() || !eventTime.Before(now) {
+		return false
+	}
+	f, ok := doc.Field(FieldStatus)
+	if !ok || f.Value.Kind != ValueString {
+		return false
+	}
+	return !t.Status.IsClosed(f.Value.Text)
 }

@@ -27,6 +27,6 @@ make plan    # validate this repository's goals and tasks with tline
 
 ## Status
 
-`tline check` validates a Timeline root (configuration, fields, timing, goal and task answers, links, and goal cycles) and stamps every valid draft with its `id`, `entered_at`, and `entry_timing`; `--dry-run` validates without writing. The list, goal, and task views are not built yet. The planned Go executable is `tline`, with `check`, `list`, `goal`, and `task` commands backed by a reusable core. Every command reads the files directly; there is no database and no version control requirement. A SQLite record store with `tline history` is a later direction.
+`tline check` validates a Timeline root (configuration, fields, timing, goal and task answers, links, and goal cycles) and stamps every valid draft with its `id`, `entered_at`, and `entry_timing`; `--dry-run` validates without writing. `tline goal list | show | tree` and `tline task list | show` view goals and tasks, flagging past-due ones; they come from the built-in goals plugin. `tline list` for all events is not built yet. The planned Go executable is `tline`, with `check`, `list`, `goal`, and `task` commands backed by a reusable core. Every command reads the files directly; there is no database and no version control requirement. A SQLite record store with `tline history` is a later direction.
 
 Applications keep their own configuration, events, and domain logic and use an installed `tline` binary. Read [AGENTS.md](AGENTS.md) before making changes.

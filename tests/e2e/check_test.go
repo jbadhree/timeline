@@ -304,3 +304,45 @@ func TestConcurrentChecksStampEachDraftOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestGoalAndTaskViews(t *testing.T) {
+	root := fixture(t, "valid")
+
+	r := tline(t, root, "goal", "tree")
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "[open] Ship the thing  (2099-12-31)") ||
+		!strings.Contains(r.stdout, "└─ [open] List the files  (2099-06-01)") {
+		t.Fatalf("goal tree: %+v", r)
+	}
+
+	r = tline(t, root, "task", "list", "--json")
+	var tasks struct {
+		Tasks []struct {
+			Path    string   `json:"path"`
+			Parents []string `json:"parents"`
+		} `json:"tasks"`
+	}
+	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &tasks) != nil || len(tasks.Tasks) != 1 ||
+		tasks.Tasks[0].Parents[0] != "goals/ship.md" {
+		t.Fatalf("task list: %+v", r)
+	}
+
+	r = tline(t, root, "--json", "task", "show", "list files")
+	if r.code != 0 || !strings.Contains(r.stdout, `"why_inherited_from": [`) {
+		t.Fatalf("task show: %+v", r)
+	}
+
+	r = tline(t, root, "--help")
+	if !strings.Contains(r.stdout, "goal            list, show, and tree views of goals (goals plugin)") {
+		t.Errorf("help does not list plugin commands:\n%s", r.stdout)
+	}
+
+	r = tline(t, root, "goal", "show", "nothing")
+	if r.code != 2 || r.stdout != "" || !strings.Contains(r.stderr, `no goal matches "nothing"`) {
+		t.Errorf("unknown goal: %+v", r)
+	}
+
+	r = tline(t, fixture(t, "invalid"), "goal", "list")
+	if r.code != 5 || !strings.Contains(r.stderr, "result is incomplete") {
+		t.Errorf("invalid root: %+v", r)
+	}
+}

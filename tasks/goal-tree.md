@@ -7,7 +7,7 @@ timeline_at: 2026-12-12T23:59:59Z
 created_by: claude
 task: Build the tree of goals and tasks from How links
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

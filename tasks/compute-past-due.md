@@ -7,7 +7,7 @@ timeline_at: 2026-12-05T23:59:59Z
 created_by: claude
 task: Compute past due when reading events
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

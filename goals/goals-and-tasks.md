@@ -96,4 +96,6 @@ Achievement is for the owner to judge. An outcome validation is an ordinary futu
 | `tline task list` | Tasks by due date with status, owner, parent goal, and past-due flags |
 | `tline task show <id or path>` | One task as its five answers |
 
+A goal or task is named by its ID, its path, or its file name with or without `.md`, such as `tline goal show plugins`; an ambiguous name lists the matches. List filters are `--owner`, `--status`, and `--past-due`, and drafts are flagged. Every view supports `--json`.
+
 The views read the event files and the injected clock and never change files. They show drafts separately and mark results incomplete, as `list` does.
