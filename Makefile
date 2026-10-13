@@ -47,7 +47,7 @@ release:
 		echo "building $$name"; \
 		mkdir -p dist/$$name && \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o dist/$$name/tline ./cmd/tline && \
-		cp README.md dist/$$name/ && \
+		cp README.md LICENSE dist/$$name/ && \
 		tar -C dist -czf dist/$$name.tar.gz $$name && rm -rf dist/$$name || exit 1; \
 	done
 	cd dist && shasum -a 256 *.tar.gz > SHA256SUMS
