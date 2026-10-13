@@ -1,0 +1,10 @@
+# This repository is a Timeline root: its plan and design are goals and tasks.
+# Start at goals/primary-goal-build-timeline.md.
+version: 1
+name: timeline
+
+types:
+  goal:
+    folder: goals # built-in type
+  task:
+    folder: tasks # built-in type

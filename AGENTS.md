@@ -1,16 +1,15 @@
 # Timeline repository instructions
 
-Start at [docs/README.md](docs/README.md), the single context entry point for humans and agents. Follow its reading path to the authoritative design, requirements, architecture, and engineering guides. Research supports decisions; it does not override requirements.
+Start at the [primary goal](goals/primary-goal-build-timeline.md). It explains what Timeline is and links to every goal and task. This repository is a Timeline root: [`timeline.yaml`](timeline.yaml) enables the built-in goal and task types, and the design for each part of the system is in its goal's `## Design` section.
 
-- Keep Timeline reusable. Consumer-specific types, domain logic, and agent runtimes belong to the applications using it.
-- Keep checked-in documentation and context independent of particular consumers. Private handoff notes belong in ignored local files; they must not be required to understand or implement Timeline.
-- Follow the architecture's Go core and `tline` CLI boundary. Do not build the deferred TUI during the initial implementation.
-- Preserve the distinction between pending files and recorded items, original registration times, saved type definitions, and history. Markdown, configuration, and preserved Git history are authoritative; the configured database is a rebuildable index.
-- Use local SQLite initially behind the [configurable database contract](docs/requirements/TL-DATABASE.md). Keep core behavior independent of database drivers and dialects; additional backends must pass the shared contract tests.
+- Keep Timeline reusable. Consumer-specific types, domain logic, and agent runtimes belong to the applications using it. `goal` and `task` are the only built-in types; examples are illustrative data.
+- Keep checked-in documentation independent of particular consumers. Private handoff notes belong in ignored local files; they must not be required to understand or implement Timeline.
+- Follow the Go core and `tline` CLI boundary in the [engineering foundation](goals/engineering-foundation.md). Do not build the TUI or other [later directions](goals/primary-goal-build-timeline.md#later-directions) unless asked, and do not make them harder.
+- Preserve the distinction between pending files and recorded events, and between event time and original entry time. Markdown, `timeline.yaml`, and Git history are the only stored state; there is no database.
+- Read recorded state through the core interface described in [query the timeline](goals/query-the-timeline.md#design), so a cache can be added later without changing behavior.
 - Preserve existing user work and unrelated staged changes. Keep dependencies modest and language simple.
-- Keep this initial handoff limited to documentation. Add application code only when implementation is requested.
-- Document or change requirements before implementing them. Keep requirement IDs, acceptance tests, and package context connected in the same branch.
-- Use subagents in separate branches and worktrees for independent implementation slices, with explicit contracts and ownership; integrate and test the combined result. Follow the [parallel workflow](docs/engineering.md#parallel-agents-and-worktrees).
-- Establish the [engineering foundation](docs/requirements/foundation.md) with the first code: types, lint, unit/integration/executable E2E tests, SQL migrations, reproducible setup, and CI. Do not defer these to cleanup.
+- Add application code only when implementation is requested.
+- Change behavior by editing the goal that owns it, or adding a goal or task linked from a parent's `## How`. Keep its `## Design` and `## Done when` in agreement; `## Done when` is what tests must demonstrate.
+- Ship tests, lint, and CI with the first code. Every behavior arrives with unit, integration, and end-to-end tests of the built `tline` binary.
 
-For documentation changes, verify local links and whitespace. For implementation, follow the [testing](docs/testing.md) and [performance](docs/performance.md) requirements. Report actual checks and limitations; do not claim proposed tooling, passing tests, or benchmark results exist before they do.
+For documentation changes, verify local links and whitespace. Report actual checks and limitations; do not claim tooling, passing tests, or benchmark results exist before they do.

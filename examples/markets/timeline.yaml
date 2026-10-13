@@ -1,4 +1,4 @@
-# Example Timeline root. Draft schema: field names and structure are proposals.
+# Example Timeline root. The schema is documented in goals/events-and-types.md.
 version: 1
 name: markets
 

@@ -2,7 +2,7 @@
 
 Worked examples of Timeline roots. They illustrate configuration and event files; the types in them are example data, not types built into Timeline.
 
-Files are shown as they look after `tline check` has recorded them. In a draft, `id` and `entered_at` are omitted and `check` assigns them. The configuration schema, ID format, and timestamp precision are drafts that these examples help settle.
+Files are shown as they look after `tline check` has recorded them. In a draft, `id`, `entered_at`, and `entry_timing` are omitted; `check` assigns the first two, copies `entry_timing` from the type, and inserts all three at the top of the frontmatter. The formats follow [events and types](../goals/events-and-types.md#design).
 
 ## markets
 

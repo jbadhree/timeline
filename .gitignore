@@ -5,5 +5,5 @@
 # Local editor state.
 /.obsidian/
 
-# Rebuildable runtime index.
+# Runtime state such as the writer lock.
 /.tline/

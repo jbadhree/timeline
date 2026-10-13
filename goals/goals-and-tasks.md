@@ -1,0 +1,89 @@
+---
+type: goal
+timeline_at: 2026-12-19T23:59:59Z
+created_by: claude
+goal: Make goals and tasks built-in types with their own views
+owner: Badhree Babu
+status: open
+---
+
+## Why
+
+Much of what agents and people put on a timeline is intended work. A goal that states what, why, by when, how, how we will know, why it will work, and who owns it can be checked for completeness, broken into smaller goals and tasks, and followed until it is achieved or goes past due. This plan is the first user.
+
+## How
+
+- Validate the built-in goal and task shapes, including links and inherited why.
+- Resolve goal links to event IDs and build the tree of goals and tasks.
+- Implement `tline goal list`, `goal show`, `goal tree`, `tline task list`, and `task show` with `--json`.
+
+## Done when
+
+- A goal or task missing any required answer is rejected, except a why inherited from a parent goal.
+- A goal link that does not resolve, a cycle of goals, and a task linking to a goal or task are each rejected.
+- Extra fields and sections configured on the built-in types are validated like any other.
+- `goal show` presents all seven answers and `task show` all five; `goal tree` renders this repository from the [primary goal](primary-goal-build-timeline.md) down to its tasks.
+- Broken links and missing answers in unchanged goals are reported by the views rather than hidden.
+
+## Why it will work
+
+Goals and tasks are ordinary recorded events with a fixed shape, so their views read the same recorded state as `list`, not a second store. Fixed section names make every goal readable the same way by people, agents, and the CLI.
+
+## Design
+
+### The two types
+
+A goal is something we intend to achieve by a date. A task is work whose result is obvious: we know when it is done, and it needs no explanation. "List the files in a folder: run `ls`" is a task, not a goal. Both use the Future rule.
+
+| Question | Location | Goal | Task |
+| --- | --- | --- | --- |
+| What | frontmatter `goal` or `task` | Required, non-empty string | Required, non-empty string |
+| Why | `## Why` section | Required unless a goal links to it from `## How` | Same as goal |
+| By when | `timeline_at` | Required | Required |
+| How | `## How` section | Required list of one or more steps; a step can link to a goal, task, or other event | Required list of one or more steps; must not link to a goal or task |
+| Done when | `## Done when` section | Required list; items can link to an outcome validation event | Not used |
+| Why it will work | `## Why it will work` section | Required, non-empty | Not used |
+| Who owns it | frontmatter `owner` | Required, non-empty string; separate from `created_by` | Same as goal |
+| Status | frontmatter `status` | `open`; closed `achieved`, `missed`, `dropped` | `open`; closed `done`, `dropped` |
+
+A root enables each type in `timeline.yaml`, for example `goal: { folder: goals }`, and may add its own `fields` and `sections`. Goals and tasks may contain other sections, such as the `## Design` sections in this plan. Sections are found by exact `##` heading text. A task with `## Done when` or `## Why it will work` is not an error, but those sections are not treated as answers; if a task needs them, it is probably a goal.
+
+A task:
+
+```markdown
+---
+type: task
+timeline_at: 2026-12-20T17:00:00Z
+created_by: agent
+task: List the files in the release folder
+owner: Ada
+status: open
+---
+
+## How
+- Run `ls release/`.
+```
+
+The goals in this folder are complete goal examples.
+
+### Links and the tree
+
+Links in a goal's `## How` and `## Done when` are relative Markdown links to event files. When a goal is checked, each such link must resolve to an event that is recorded or recorded in the same check; links to other files, URLs, and anchors are allowed but are not steps. A link from a goal's `## How` to a goal or task makes it a **child**. Child links must not form a cycle. A task's `## How` may link to documents, URLs, or other events, but not to a goal or task, so tasks are always leaves.
+
+Views resolve links to event `id`s, so a link still identifies the event the goal meant after the linked file moves. A stale path in an unchanged goal is reported as broken, not silently dropped.
+
+A child may omit `## Why`; the views then give its parents' goal statements as the reason. If a child loses its last parent while it has no `## Why`, the views report the missing answer.
+
+Achievement is for the owner to judge. An outcome validation is an ordinary future event a timeline can define; recording its result is how achievement becomes evidence rather than opinion.
+
+### Views
+
+| Command | Shows |
+| --- | --- |
+| `tline goal list` | Goals by target date with status, owner, and past-due flags; filters by owner, status, and past due |
+| `tline goal show <id or path>` | One goal as its seven answers, with the type, status, and past-due flag of every linked step |
+| `tline goal tree [id or path]` | Goals and tasks beneath a goal, depth first in `## How` order, or beneath every top-level goal |
+| `tline task list` | Tasks by due date with status, owner, parent goal, and past-due flags |
+| `tline task show <id or path>` | One task as its five answers |
+
+The views read recorded events and the injected clock and never change files. They report pending changes separately and mark results incomplete, as `list` does.

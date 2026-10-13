@@ -1,23 +1,19 @@
 # Timeline
 
-Timeline records when an event happens and when it enters the system. Humans and agents edit Markdown items directly, with configurable types and Past, Future, or Real-time entry rules.
+Timeline gives agents, and the humans working with them, a sense of time. It records events on a timeline with two times for each: when the event happened (or is expected), and when it entered the timeline. News is learned after the fact, predictions are made in advance, and live observations are recorded as they happen. Future events, such as tasks and goals, can go past due.
 
-## Design
+Events are Markdown files with YAML metadata, edited by humans and agents with any tool. Users define their own event types and Past, Future, or Real-time entry rules. Goals and tasks are built in: a goal answers what, why, by when, how, how we know it is done, why it will work, and who owns it; a task is a simpler step whose result is obvious.
 
-- [Start here](docs/README.md): the context entry point, requirements, and contributor reading path.
-- [System design](docs/system-design.md): the authoritative product behavior.
-- [Architecture](docs/architecture.md): the authoritative implementation plan.
-- [Examples](examples/README.md): worked configuration and event files.
-- [Build versus customize](docs/build-vs-customize.md) and [product research](docs/research.md): supporting context, not specifications.
+## Start here
 
-The initial database is local SQLite. [Database selection](docs/requirements/TL-DATABASE.md) is configurable, with a shared contract for future supported backends; databases remain rebuildable indexes.
+This repository plans and designs Timeline as Timeline goals and tasks. Start at the [primary goal](goals/primary-goal-build-timeline.md), which explains the system and links to every goal and task.
+
+- [`goals/`](goals/): what we are building and why, with the design for each part.
+- [`tasks/`](tasks/): concrete steps whose result is obvious.
+- [`examples/`](examples/README.md): worked configuration and event files.
 
 ## Status
 
-This repository is ready for implementation planning; application code has not been written. The planned Go executable is `tline`, with `check`, `list`, and `history` commands backed by a reusable core. A TUI is deferred. See the architecture for command behavior, storage, recovery, and verification requirements.
+Application code has not been written. The planned Go executable is `tline`, with `check`, `list`, `history`, `goal`, and `task` commands backed by a reusable core. `check` records events in Git commits; every command reads the files and Git directly, with no database.
 
-Applications retain their own configuration, items, and domain logic and use an installed `tline` binary without a Git submodule.
-
-Implementation follows documented requirements first, with unit, integration, and executable E2E tests from the first code. See the [engineering workflow](docs/engineering.md), [development setup contract](docs/development.md), and [researched tooling options](docs/tooling.md). Tooling and setup are documented proposals, not installed automation yet.
-
-The configuration and acceptance-record formats, timestamp precision, locking and recovery details, minimum Go version, libraries, and release tooling remain implementation choices. See [AGENTS.md](AGENTS.md) before making changes.
+Applications keep their own configuration, events, and domain logic and use an installed `tline` binary. Read [AGENTS.md](AGENTS.md) before making changes.
