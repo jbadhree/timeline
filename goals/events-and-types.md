@@ -13,10 +13,10 @@ Anything worth remembering can be an event, so users must define their own types
 
 ## How
 
-- Find the Timeline root from the nearest `timeline.yaml`, or from `--root`.
-- Decode and validate `timeline.yaml`: types, folders, fields, sections, statuses, and the reserved `goal` and `task` types.
-- Decode event files into frontmatter and body, and check the shared and type-specific fields and required sections.
-- Report every problem with the file, field or section, and reason.
+- [Find the Timeline root from the nearest timeline.yaml or --root](../tasks/root-discovery.md)
+- [Decode and validate timeline.yaml strictly](../tasks/decode-config.md)
+- [Read event files into frontmatter, sections, list items, and links](../tasks/decode-event-files.md)
+- [Report every problem with its file, line, field or section, and reason](../tasks/report-diagnostics.md)
 
 ## Done when
 

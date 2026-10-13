@@ -13,9 +13,9 @@ Humans and agents edit files with whatever tools they like, so Timeline needs on
 
 ## How
 
-- Validate files with the rules from [events and types](events-and-types.md) and [timing](two-times-and-timing.md), plus root-wide checks such as duplicate IDs.
-- For each valid draft, assign `id`, `entered_at`, and `entry_timing` and write them into the file.
-- Take a writer lock and re-read each file before writing, so concurrent checks and editors never overwrite each other.
+- [Add tline check --dry-run](../tasks/check-dry-run.md)
+- [Stamp valid drafts with id, entered_at, and entry_timing](../tasks/stamp-drafts.md)
+- [Lock the root and re-read files before stamping](../tasks/writer-lock.md)
 
 ## Done when
 

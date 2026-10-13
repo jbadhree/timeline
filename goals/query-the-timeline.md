@@ -13,8 +13,8 @@ People and agents need to read events in time order, find what is upcoming or pa
 
 ## How
 
-- Define the core interface for reading events and implement it by scanning the configured folders.
-- Implement `tline list` with `--json`.
+- [Define the core interface for reading events](../tasks/read-events-interface.md)
+- [Implement tline list with filters and --json](../tasks/tline-list.md)
 - [Measure read speed on generated timelines](../tasks/measure-read-speed.md)
 
 ## Done when

@@ -402,33 +402,41 @@ func (v *validator) checkDuplicateIDs() {
 	}
 }
 
-// resolveLink returns the event a relative link points to. ok is false for
-// links that are not steps: URLs, anchors, and files outside the configured
-// folders. A link into a configured folder that matches no event is reported.
-func (v *validator) resolveLink(e *event, l Link) (target *event, ok bool) {
+// linkResult says what a link in a goal or task points to.
+type linkResult int
+
+const (
+	linkOther   linkResult = iota // URL, anchor, or file outside the configured folders
+	linkMissing                   // into a configured folder, but no such event; already reported
+	linkEvent                     // an event file in the root
+)
+
+// resolveLink returns the event a relative link points to. A link into a
+// configured folder that matches no event is reported here.
+func (v *validator) resolveLink(e *event, l Link) (*event, linkResult) {
 	t := l.Target
 	if i := strings.IndexByte(t, '#'); i >= 0 {
 		t = t[:i]
 	}
 	if t == "" || strings.Contains(t, "://") || strings.HasPrefix(t, "mailto:") || strings.HasPrefix(t, "/") {
-		return nil, false
+		return nil, linkOther
 	}
 	if u, err := url.PathUnescape(t); err == nil {
 		t = u // [x](list%20files.md)
 	}
 	p := path.Clean(path.Join(path.Dir(e.doc.Path), t))
 	if p == ".." || strings.HasPrefix(p, "../") {
-		return nil, false
+		return nil, linkOther
 	}
 	if _, inFolder := v.in.Config.TypeForPath(p); !inFolder || !strings.HasSuffix(p, ".md") {
-		return nil, false
+		return nil, linkOther
 	}
 	target, found := v.byPath[p]
 	if !found {
 		v.add(Diagnostic{Path: e.doc.Path, Line: l.Line, Message: fmt.Sprintf("link %q does not resolve to an event (looked for %s)", l.Target, p)})
-		return nil, false
+		return nil, linkMissing
 	}
-	return target, true
+	return target, linkEvent
 }
 
 func (v *validator) checkGoalLinks() {
@@ -437,13 +445,7 @@ func (v *validator) checkGoalLinks() {
 		case GoalType:
 			if s, ok := e.doc.Section(SectionHow); ok {
 				for _, item := range s.Items {
-					for _, l := range item.Links {
-						t, ok := v.resolveLink(e, l)
-						if ok && t.typ.Builtin != NotBuiltin {
-							e.children = append(e.children, t)
-							t.parents = append(t.parents, e)
-						}
-					}
+					v.goalStep(e, item)
 				}
 			}
 			if s, ok := e.doc.Section(SectionDoneWhen); ok {
@@ -457,8 +459,7 @@ func (v *validator) checkGoalLinks() {
 			if s, ok := e.doc.Section(SectionHow); ok {
 				for _, item := range s.Items {
 					for _, l := range item.Links {
-						t, ok := v.resolveLink(e, l)
-						if ok && t.typ.Builtin != NotBuiltin {
+						if t, r := v.resolveLink(e, l); r == linkEvent && t.typ.Builtin != NotBuiltin {
 							v.add(Diagnostic{Path: e.doc.Path, Line: l.Line, Section: SectionHow, Message: fmt.Sprintf("a task's steps must not link to a %s (%s); make this task a goal instead", t.typ.Name, t.doc.Path)})
 						}
 					}
@@ -466,6 +467,36 @@ func (v *validator) checkGoalLinks() {
 			}
 		}
 	}
+}
+
+// goalStep records the goals and tasks one step of a goal links to. Every
+// step must link to at least one, so that all work under a goal is tracked.
+func (v *validator) goalStep(e *event, item ListItem) {
+	linked, missing := false, false
+	for _, l := range item.Links {
+		t, r := v.resolveLink(e, l)
+		switch {
+		case r == linkMissing:
+			missing = true
+		case r == linkEvent && t.typ.Builtin != NotBuiltin:
+			linked = true
+			e.children = append(e.children, t)
+			t.parents = append(t.parents, e)
+		}
+	}
+	if !linked && !missing {
+		v.add(Diagnostic{Path: e.doc.Path, Line: item.Line, Section: SectionHow, Message: fmt.Sprintf("step %q must link to a goal or task", firstLine(item.Text))})
+	}
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	if len(s) > 60 {
+		s = s[:57] + "..."
+	}
+	return s
 }
 
 // checkCycles reports goals whose child links lead back to themselves.

@@ -13,10 +13,10 @@ People rarely learn about things at the moment they happen. A report entered on 
 
 ## How
 
-- Read the event time from the author's `timeline_at`, and assign the entry time only in `tline check`.
-- Validate each new event against its type's Past, Future, or Real-time rule, using an injected clock.
-- Validate updates against the original entry time and the original rule.
-- Compute past due when reading, never store it.
+- [Validate past, future, and real_time timing with an injected clock](../tasks/validate-timing-rules.md)
+- [Judge recorded events by the timing rule they were entered under](../tasks/freeze-entry-timing.md)
+- [Stamp valid drafts with id, entered_at, and entry_timing](../tasks/stamp-drafts.md)
+- [Compute past due when reading events](../tasks/compute-past-due.md)
 
 ## Done when
 

@@ -52,9 +52,12 @@ func goalDoc(path string, sections ...Section) Document {
 	}, Sections: sections}
 }
 
+// stepTask is the task fullGoal links to by default.
+var stepTask = taskDoc("tasks/step.md", items("How", "Do the work."))
+
 func fullGoal(path string, how ...string) Document {
 	if len(how) == 0 {
-		how = []string{"Do the work."}
+		how = []string{"[Do the work](../tasks/step.md)"}
 	}
 	return goalDoc(path,
 		prose("Why", "Because."),
@@ -126,7 +129,7 @@ func TestGoalMissingAnswers(t *testing.T) {
 
 func TestTaskRules(t *testing.T) {
 	res := check(t,
-		fullGoal("goals/g.md"),
+		fullGoal("goals/g.md"), stepTask,
 		taskDoc("tasks/t.md", prose("Why", "Needed."), items("How", "See [goal](../goals/g.md)")),
 		taskDoc("tasks/u.md", items("How", "Run it.")),
 	)
@@ -150,15 +153,37 @@ func TestTaskRules(t *testing.T) {
 }
 
 func TestGoalLinks(t *testing.T) {
-	res := check(t, fullGoal("goals/g.md",
-		"[Missing](missing.md)",
-		"[Outside](../README.md)",
-		"[Web](https://example.com)",
-		"[Anchor](#why)",
+	g := fullGoal("goals/g.md", "[Missing](missing.md)")
+	g.Sections[2] = items("Done when", "[Outside](../README.md)", "[Web](https://example.com)", "[Anchor](#why)", "[Gone](../tasks/gone.md)")
+	res := check(t, g)
+	wantProblems(t, res, "goals/g.md",
+		`link "missing.md" does not resolve to an event (looked for goals/missing.md)`,
+		`link "../tasks/gone.md" does not resolve to an event (looked for tasks/gone.md)`,
+	)
+	// A missing link is reported once, not also as an unlinked step; links in
+	// Done when to files outside the folders, URLs, and anchors are fine.
+	if len(res.Diagnostics) != 2 {
+		t.Errorf("got %v", res.Diagnostics)
+	}
+}
+
+func TestGoalStepsMustLinkToGoalOrTask(t *testing.T) {
+	news := Document{Path: "news/n.md", Fields: []Field{
+		str("type", "news"), stamp("timeline_at", "2026-10-01T13:00:00Z"), str("created_by", "a"), str("ticker", "X"),
+	}}
+	res := check(t, news, stepTask, fullGoal("goals/g.md",
+		"Start with [the step](../tasks/step.md) first", // text around a link is fine
+		"Plain text with no link",
+		"[Background reading](https://example.com)",
+		"[A news event](../news/n.md)",
 	))
-	wantProblems(t, res, "goals/g.md", `link "missing.md" does not resolve to an event (looked for goals/missing.md)`)
-	if len(res.Diagnostics) != 1 {
-		t.Errorf("only the missing event link is a problem, got %v", res.Diagnostics)
+	wantProblems(t, res, "goals/g.md",
+		`step "Plain text with no link" must link to a goal or task`,
+		`step "[Background reading](https://example.com)" must link to a goal or task`,
+		`step "[A news event](../news/n.md)" must link to a goal or task`,
+	)
+	if len(res.Diagnostics) != 3 {
+		t.Errorf("got %v", res.Diagnostics)
 	}
 }
 
@@ -183,7 +208,7 @@ func TestDraftTimingUsesNow(t *testing.T) {
 	news := Document{Path: "news/n.md", Fields: []Field{
 		str("type", "news"), stamp("timeline_at", "2026-10-13T00:00:00Z"), str("created_by", "a"), str("ticker", "X"),
 	}}
-	res := check(t, g, news)
+	res := check(t, g, news, stepTask)
 	if len(res.Diagnostics) != 2 {
 		t.Fatalf("got %v", res.Diagnostics)
 	}

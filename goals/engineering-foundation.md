@@ -14,9 +14,9 @@ Tests, lint, and CI are cheapest to add before there is behavior to protect, and
 ## How
 
 - [Pin the Go toolchain and developer tools](../tasks/pin-go-toolchain.md)
-- Add a `tline` shell with `--help`, `--version`, and `--root`.
-- Add one local command that runs formatting, build, curated lint, unit, integration, and end-to-end tests.
-- Run that command in CI on every pull request, on macOS and Linux.
+- [Add the tline shell with --help, --version, --root, and --json](../tasks/tline-shell.md)
+- [Add make check for formatting, build, lint, and tests](../tasks/make-check.md)
+- [Run make check and make race in CI on macOS and Linux](../tasks/ci-workflow.md)
 
 ## Done when
 

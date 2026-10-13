@@ -13,14 +13,15 @@ Much of what agents and people put on a timeline is intended work. A goal that s
 
 ## How
 
-- Validate the built-in goal and task shapes, including links and inherited why.
-- Resolve goal links to event IDs and build the tree of goals and tasks.
-- Implement `tline goal list`, `goal show`, `goal tree`, `tline task list`, and `task show` with `--json`.
+- [Validate goal and task answers, links, and cycles](../tasks/validate-goals-and-tasks.md)
+- [Build the tree of goals and tasks from How links](../tasks/goal-tree.md)
+- [Implement tline goal list, show, and tree](../tasks/goal-views.md)
+- [Implement tline task list and show](../tasks/task-views.md)
 
 ## Done when
 
 - A goal or task missing any required answer is rejected, except a why inherited from a parent goal.
-- A goal link that does not resolve, a cycle of goals, and a task linking to a goal or task are each rejected.
+- A goal step that does not link to a goal or task, a goal link that does not resolve, a cycle of goals, and a task linking to a goal or task are each rejected.
 - Extra fields and sections configured on the built-in types are validated like any other.
 - `goal show` presents all seven answers and `task show` all five; `goal tree` renders this repository from the [primary goal](primary-goal-build-timeline.md) down to its tasks.
 - Broken links and missing answers in unchanged goals are reported by the views rather than hidden.
@@ -40,7 +41,7 @@ A goal is something we intend to achieve by a date. A task is work whose result 
 | What | frontmatter `goal` or `task` | Required, non-empty string | Required, non-empty string |
 | Why | `## Why` section | Required unless a goal links to it from `## How` | Same as goal |
 | By when | `timeline_at` | Required | Required |
-| How | `## How` section | Required list of one or more steps; a step can link to a goal, task, or other event | Required list of one or more steps; must not link to a goal or task |
+| How | `## How` section | Required list of one or more steps; every step must link to a goal or task | Required list of one or more plain instructions; must not link to a goal or task |
 | Done when | `## Done when` section | Required list; items can link to an outcome validation event | Not used |
 | Why it will work | `## Why it will work` section | Required, non-empty | Not used |
 | Who owns it | frontmatter `owner` | Required, non-empty string; separate from `created_by` | Same as goal |
@@ -68,7 +69,9 @@ The goals in this folder are complete goal examples.
 
 ### Links and the tree
 
-Links in a goal's `## How` and `## Done when` are relative Markdown links to event files. When a goal is checked, each such link must resolve to an event file in the root; links to other files, URLs, and anchors are allowed but are not steps. A link from a goal's `## How` to a goal or task makes it a **child**. Child links must not form a cycle. A task's `## How` may link to documents, URLs, or other events, but not to a goal or task, so tasks are always leaves.
+Every step in a goal's `## How` must link to a goal or task, so all work under a goal has an owner, a date, and a status, and can go past due. A step may have text around its link, or link to several goals and tasks; plain-text steps, and steps that link only to URLs, documents, or other kinds of events, are rejected. A linked goal or task is a **child** of the goal; a task may be the child of more than one goal. Child links must not form a cycle.
+
+Links in `## Done when` are optional. When a goal is checked, every link in `## How` or `## Done when` that points into a configured folder must resolve to an event file; links to URLs, anchors, and files outside the folders are allowed there. A task's `## How` may link to documents, URLs, or other events, but not to a goal or task, so tasks are always leaves.
 
 Views resolve links to event `id`s, so a link still identifies the event the goal meant after the linked file moves. A stale path in an unchanged goal is reported as broken, not silently dropped.
 
