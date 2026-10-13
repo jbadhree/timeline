@@ -4,7 +4,7 @@ GOLANGCI_LINT_VERSION := v2.14.0
 BIN := $(CURDIR)/bin
 GOLANGCI_LINT := $(BIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 
-.PHONY: check fmt-check build lint test race
+.PHONY: check fmt-check build lint test race plan
 
 check: fmt-check build lint test
 
@@ -22,6 +22,11 @@ test:
 
 race:
 	go test -race ./...
+
+# Validate this repository's own goals and tasks. Not part of `check`: drafts
+# are checked against the current time, so the result changes as dates pass.
+plan:
+	go run ./cmd/tline check --dry-run
 
 $(GOLANGCI_LINT):
 	mkdir -p $(BIN)

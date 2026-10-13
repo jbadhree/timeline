@@ -7,6 +7,5 @@
 // to stderr.
 //
 // Exit codes are provisional until the first release (see the "Command line"
-// section of goals/primary-goal-build-timeline.md): ExitOK, ExitFailure, and
-// ExitUsage are the only codes so far.
+// section of goals/primary-goal-build-timeline.md).
 package cli

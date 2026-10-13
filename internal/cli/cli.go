@@ -12,9 +12,10 @@ import (
 
 // Exit codes returned by Run.
 const (
-	ExitOK      = 0 // success
-	ExitFailure = 1 // operational failure, such as an unwritable output stream
-	ExitUsage   = 2 // invalid flags, arguments, or command
+	ExitOK         = 0 // success
+	ExitFailure    = 1 // operational failure, such as an unwritable output stream
+	ExitUsage      = 2 // invalid flags, arguments, or command
+	ExitValidation = 3 // files or configuration failed validation
 )
 
 // Version is the release version. Release builds set it with
@@ -43,16 +44,15 @@ Flags:
   --help          print this help and exit
 
 Commands:
+  check           validate event files (only --dry-run so far)
   help            print this help
 
-No Timeline commands are implemented yet.
+Run 'tline check --help' for check's flags.
 `
 
 // Run executes tline with args (excluding the program name) and returns the
 // process exit code. ctx carries cancellation from the caller.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	_ = ctx // used once commands do work
-
 	var opts Options
 	var showVersion bool
 	fs := flag.NewFlagSet("tline", flag.ContinueOnError)
@@ -79,6 +79,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	switch rest[0] {
 	case "help":
 		return writeOut(stdout, stderr, usage)
+	case "check":
+		return runCheck(ctx, opts, rest[1:], stdout, stderr)
 	default:
 		return usageError(stderr, fmt.Sprintf("unknown command %q", rest[0]))
 	}

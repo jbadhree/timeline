@@ -82,8 +82,8 @@ Each event is one Markdown file in its type's folder: YAML frontmatter, then a M
 | `entry_timing` | The type's timing rule when the event was first recorded | `tline check` at first recording |
 | `created_by` | Free-text label for the human or agent that added the event | Author |
 
-A draft omits `id`, `entered_at`, and `entry_timing`; see [recording](record-events.md). Field values keep their declared types; missing stays distinct from empty.
+`type`, `timeline_at`, and `created_by` are required. A draft omits `id`, `entered_at`, and `entry_timing`; see [recording](record-events.md). Field values keep their declared types, so `ticker: 123` is a number, not a string; quote it to make it text. Missing stays distinct from empty.
 
 ### Links
 
-Events can link to other events, sections, external documents, or sources with relative Markdown links and optional heading anchors. Timeline preserves links and interprets them only in [goals and tasks](goals-and-tasks.md#design). Backlinks and link repair are later work.
+Events can link to other events, sections, external documents, or sources with relative Markdown links and optional heading anchors. A target with spaces is written percent-encoded, `[x](list%20files.md)`, or in angle brackets, `[x](<list files.md>)`. Timeline preserves links and interprets them only in [goals and tasks](goals-and-tasks.md#design). Backlinks and link repair are later work.

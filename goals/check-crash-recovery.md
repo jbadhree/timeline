@@ -15,7 +15,7 @@ status: open
 
 - Keep a record under `.tline/` of the assignments a check has written, while it holds the writer lock.
 - On the next check, use that record to finish the commit if the files still match, or report exactly which files need attention if they do not.
-- Document the protocol in the [recording goal's design](record-events.md#design).
+- Document the protocol in the `## Design` section of the parent recording goal.
 
 ## Done when
 

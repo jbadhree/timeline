@@ -1,0 +1,10 @@
+version: 1
+name: e2e-valid
+types:
+  goal: { folder: goals }
+  task: { folder: tasks }
+  news:
+    folder: news
+    entry_timing: past
+    fields:
+      ticker: { type: string, required: true }

@@ -49,6 +49,8 @@ A Real-time type defines how much delay it accepts, so an old observation cannot
 
 ### Entry time
 
+A draft is validated as if it were recorded now, so a Future draft whose date has already passed fails: it can no longer be entered in advance. Record plans before their dates, or move the date.
+
 For a new event, A is the time the check records it, read from an injected clock after validation succeeds and immediately before writing; never the command's start time, a dry run, a file timestamp, or a value in draft YAML.
 
 `entry_timing` is written into the file at first recording so a reader of the file alone can see whether the event was entered after, before, or as it happened. It is a copy of a recorded fact: the authoritative rule is the type's `entry_timing` in `timeline.yaml` at the event's first Timeline commit, and the two always agree.

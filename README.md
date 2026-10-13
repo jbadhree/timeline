@@ -19,12 +19,13 @@ Requires Go (the `toolchain` line in `go.mod` downloads the pinned version autom
 ```sh
 make check   # format, CGO-free build, lint, unit and end-to-end tests
 make race    # tests with the race detector
+make plan    # validate this repository's goals and tasks with tline
 ```
 
 `make check` installs the pinned golangci-lint into `bin/` on first run. CI runs both targets on macOS and Linux for every push to `main` and every pull request.
 
 ## Status
 
-Only the `tline` shell exists so far: `--help`, `--version`, `--root`, and `--json`. The planned Go executable is `tline`, with `check`, `list`, `history`, `goal`, and `task` commands backed by a reusable core. `check` records events in Git commits; every command reads the files and Git directly, with no database.
+`tline check --dry-run` validates a Timeline root: configuration, fields, timing, goal and task answers, links, and goal cycles. Recording, history, and the list, goal, and task views are not built yet. The planned Go executable is `tline`, with `check`, `list`, `history`, `goal`, and `task` commands backed by a reusable core. `check` records events in Git commits; every command reads the files and Git directly, with no database.
 
 Applications keep their own configuration, events, and domain logic and use an installed `tline` binary. Read [AGENTS.md](AGENTS.md) before making changes.
