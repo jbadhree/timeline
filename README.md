@@ -24,8 +24,8 @@ Releases are published on the [GitHub releases page](https://github.com/jbadhree
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
-tar -xzf tline_v0.1.0_darwin_arm64.tar.gz
-mv tline_v0.1.0_darwin_arm64/tline /usr/local/bin/
+tar -xzf tline_v0.2.0_darwin_arm64.tar.gz
+mv tline_v0.2.0_darwin_arm64/tline /usr/local/bin/
 ```
 
 The macOS binaries are not signed, so macOS blocks a downloaded copy at first. Allow it with `xattr -d com.apple.quarantine /usr/local/bin/tline`. With Go installed you can instead run `go install github.com/jbadhree/timeline/cmd/tline@latest`, which macOS does not block.
