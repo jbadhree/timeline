@@ -1,4 +1,7 @@
 ---
+id: 01M4SXMJ8GXW317PX0W6SPJ1P5
+entered_at: 2026-10-13T06:01:46Z
+entry_timing: future
 type: goal
 timeline_at: 2026-11-07T23:59:59Z
 created_by: claude

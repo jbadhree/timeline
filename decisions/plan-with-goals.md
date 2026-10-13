@@ -1,4 +1,7 @@
 ---
+id: 01M4SXMJ8GBEAH13CP1CKQN1ET
+entered_at: 2026-10-13T06:01:46Z
+entry_timing: past
 type: decision
 timeline_at: 2026-10-13T00:19:05Z
 created_by: claude
