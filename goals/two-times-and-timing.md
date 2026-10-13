@@ -7,7 +7,7 @@ timeline_at: 2026-11-07T23:59:59Z
 created_by: claude
 goal: Record when each event happened and when it entered the timeline, and enforce each type's timing rule
 owner: Badhree Babu
-status: open
+status: achieved
 ---
 
 ## Why

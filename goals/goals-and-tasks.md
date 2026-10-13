@@ -7,7 +7,7 @@ timeline_at: 2026-12-19T23:59:59Z
 created_by: claude
 goal: Give goals and tasks their rules and views, as the built-in goals plugin
 owner: Badhree Babu
-status: open
+status: achieved
 ---
 
 ## Why

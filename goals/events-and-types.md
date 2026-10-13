@@ -7,7 +7,7 @@ timeline_at: 2026-11-07T23:59:59Z
 created_by: claude
 goal: Let each timeline define its own event types and keep events as readable Markdown files
 owner: Badhree Babu
-status: open
+status: achieved
 ---
 
 ## Why
