@@ -27,7 +27,6 @@ type checkJSON struct {
 		Section string `json:"section"`
 		Message string `json:"message"`
 	} `json:"diagnostics"`
-	Unverified []string `json:"unverified"`
 }
 
 func fixture(t *testing.T, name string) string {
@@ -57,9 +56,6 @@ func TestCheckDryRunValidRoot(t *testing.T) {
 	}
 	if !strings.Contains(r.stdout, "checked 3 events (2 drafts, 1 recorded): all valid. Nothing was recorded.") {
 		t.Errorf("stdout = %q", r.stdout)
-	}
-	if !strings.Contains(r.stdout, "1 recorded event was checked for format and timing only") {
-		t.Errorf("missing unverified note: %q", r.stdout)
 	}
 }
 
@@ -134,7 +130,7 @@ func TestCheckMarketsExample(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 	out := decodeCheck(t, r)
-	if len(out.Events) != 2 || len(out.Unverified) != 2 {
+	if len(out.Events) != 2 || out.Events[0].Draft || out.Events[1].Draft {
 		t.Errorf("out = %+v", out)
 	}
 }
@@ -155,7 +151,7 @@ func TestCheckUsageAndConfigErrors(t *testing.T) {
 		inStderr string
 		inStdout string
 	}{
-		{"recording not implemented", valid, []string{"check"}, 2, "recording is not implemented yet", ""},
+		{"stamping not implemented", valid, []string{"check"}, 2, "stamping drafts is not implemented yet", ""},
 		{"no root", t.TempDir(), []string{"check", "--dry-run"}, 2, "no timeline.yaml found", ""},
 		{"path outside folders", valid, []string{"check", "--dry-run", "timeline.yaml"}, 2, "not inside a configured type folder", ""},
 		{"path outside root", valid, []string{"check", "--dry-run", ".."}, 2, "outside the Timeline root", ""},

@@ -38,7 +38,7 @@ A tracked `timeline.yaml` marks the Timeline root. By default, search the curren
 tline --root /path/to/my-project check
 ```
 
-An explicit root requires `timeline.yaml` at that location. Timeline never invents types or creates configuration. Recording requires a Git repository containing the root; report missing Git rather than initializing one.
+An explicit root requires `timeline.yaml` at that location. Timeline never invents types or creates configuration.
 
 ### `timeline.yaml`
 

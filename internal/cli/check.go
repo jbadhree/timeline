@@ -28,11 +28,11 @@ in the configured folders is checked; with paths (files or folders), only
 those are reported, though rules that span the root, such as duplicate IDs
 and goal links, still consider every file.
 
-Recording is not implemented yet. When it is, a check without --dry-run will
-edit new event files and create a Git commit.
+Stamping is not implemented yet. When it is, a check without --dry-run will
+edit draft files, adding their id, entered_at, and entry_timing.
 
 Flags:
-  --dry-run   validate only; required until recording exists
+  --dry-run   validate only; required until stamping exists
   --json      machine-readable output on stdout
 `
 
@@ -44,9 +44,6 @@ type checkOutput struct {
 	Valid       bool               `json:"valid"`
 	Events      []core.EventResult `json:"events"`
 	Diagnostics []core.Diagnostic  `json:"diagnostics"`
-	// Unverified lists events whose recorded metadata was not checked against
-	// Git history, because reading history is not implemented yet.
-	Unverified []string `json:"unverified"`
 }
 
 func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr io.Writer) int {
@@ -74,7 +71,7 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 	opts.JSON = opts.JSON || *asJSON
 
 	if !*dryRun {
-		return usageError(stderr, "check: recording is not implemented yet; run 'tline check --dry-run' to validate without recording")
+		return usageError(stderr, "check: stamping drafts is not implemented yet; run 'tline check --dry-run' to validate without changing files")
 	}
 
 	cwd, err := os.Getwd()
@@ -91,7 +88,7 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		return ExitFailure
 	}
 
-	out := checkOutput{Root: root, DryRun: true, Events: []core.EventResult{}, Diagnostics: []core.Diagnostic{}, Unverified: []string{}}
+	out := checkOutput{Root: root, DryRun: true, Events: []core.EventResult{}, Diagnostics: []core.Diagnostic{}}
 	cfg, err := config.Load(root)
 	if err != nil {
 		var cerr *config.Error
@@ -119,7 +116,7 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		Selected: selected,
 		Now:      now().UTC().Truncate(time.Second),
 	})
-	out.Events, out.Diagnostics, out.Unverified = res.Events, res.Diagnostics, res.Unverified
+	out.Events, out.Diagnostics = res.Events, res.Diagnostics
 	out.Valid = res.Valid()
 	return renderCheck(stdout, stderr, opts.JSON, out, "")
 }
@@ -208,9 +205,6 @@ func renderCheck(stdout, stderr io.Writer, asJSON bool, out checkOutput, failure
 			fmt.Fprintf(&b, "%d with problems, %d %s.", invalid, len(out.Diagnostics), plural(len(out.Diagnostics), "problem", "problems"))
 		}
 		b.WriteString(" Nothing was recorded.\n")
-		if n := len(out.Unverified); n > 0 {
-			fmt.Fprintf(&b, "Note: %d recorded %s checked for format and timing only; reading Git history is not implemented yet.\n", n, plural(n, "event was", "events were"))
-		}
 	}
 	if c := writeOut(stdout, stderr, b.String()); c != ExitOK {
 		return c

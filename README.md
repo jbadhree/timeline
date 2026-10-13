@@ -14,7 +14,7 @@ This repository plans and designs Timeline as Timeline goals and tasks. Start at
 
 ## Development
 
-Requires Go (the `toolchain` line in `go.mod` downloads the pinned version automatically), Git, and Make, on macOS or Linux. No credentials or global configuration are needed.
+Requires Go (the `toolchain` line in `go.mod` downloads the pinned version automatically) and Make, on macOS or Linux. No credentials or global configuration are needed.
 
 ```sh
 make check   # format, CGO-free build, lint, unit and end-to-end tests
@@ -26,6 +26,6 @@ make plan    # validate this repository's goals and tasks with tline
 
 ## Status
 
-`tline check --dry-run` validates a Timeline root: configuration, fields, timing, goal and task answers, links, and goal cycles. Recording, history, and the list, goal, and task views are not built yet. The planned Go executable is `tline`, with `check`, `list`, `history`, `goal`, and `task` commands backed by a reusable core. `check` records events in Git commits; every command reads the files and Git directly, with no database.
+`tline check --dry-run` validates a Timeline root: configuration, fields, timing, goal and task answers, links, and goal cycles. Stamping drafts, and the list, goal, and task views, are not built yet. The planned Go executable is `tline`, with `check`, `list`, `goal`, and `task` commands backed by a reusable core. Every command reads the files directly; there is no database and no version control requirement. A SQLite record store with `tline history` is a later direction.
 
 Applications keep their own configuration, events, and domain logic and use an installed `tline` binary. Read [AGENTS.md](AGENTS.md) before making changes.

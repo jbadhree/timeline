@@ -32,11 +32,11 @@ A small first slice proves the toolchain on every platform before the recording 
 
 ### Language and packaging
 
-Use Go for the CLI and core. Build platform-specific `tline` executables without CGO so users do not need Go installed. Git is a runtime prerequisite; Timeline calls the installed `git` executable. Keep dependencies modest. Consumers use an installed `tline` binary and keep their own configuration, events, and domain logic.
+Use Go for the CLI and core. Build platform-specific `tline` executables without CGO so users do not need Go installed. `tline` needs nothing else at runtime. Keep dependencies modest. Consumers use an installed `tline` binary and keep their own configuration, events, and domain logic.
 
 ### Packages
 
-Validation, recording, history, queries, and goal and task views live in a reusable core. The CLI parses arguments and renders results; it does not reimplement rules. A later TUI or other front end uses the same core and must not add another writable source of truth. Use one Go module, and add packages when their first behavior is implemented, not as empty scaffolding.
+Validation, stamping, queries, and goal and task views live in a reusable core. The CLI parses arguments and renders results; it does not reimplement rules. A later TUI or other front end uses the same core and must not add another writable source of truth. Use one Go module, and add packages when their first behavior is implemented, not as empty scaffolding.
 
 | Path | Responsibility |
 | --- | --- |
@@ -45,27 +45,26 @@ Validation, recording, history, queries, and goal and task views live in a reusa
 | `core/` | Use cases, domain values, validation, and the narrow interfaces adapters implement |
 | `internal/config/` | Root discovery and `timeline.yaml` decoding |
 | `internal/document/` | Markdown and frontmatter decoding, file writes |
-| `internal/gitstore/` | Timeline commits and history through the `git` executable |
-| `tests/integration/`, `tests/e2e/` | Real Git and built-executable scenarios |
+| `tests/integration/`, `tests/e2e/` | Real-filesystem and built-executable scenarios |
 
-`core/` must not import the CLI or Git process code. Inject the clock and effects, pass cancellation explicitly, and keep dependencies acyclic without a shared `utils` package. Each package documents ownership and invariants in `doc.go`.
+`core/` must not import the CLI or read files itself. Inject the clock and effects, pass cancellation explicitly, and keep dependencies acyclic without a shared `utils` package. Each package documents ownership and invariants in `doc.go`.
 
 ### Tests
 
 | Level | Boundary | Examples |
 | --- | --- | --- |
-| Unit | Pure logic, no Git processes | Timing boundaries, field validation, decoding, ordering |
-| Integration | Real temporary Git repositories | All-or-nothing recording, moves and removals, preserved staged changes |
+| Unit | Pure logic, no file access | Timing boundaries, field validation, decoding, ordering |
+| Integration | Real temporary folders | All-or-nothing stamping, files changed during a check, concurrent checks |
 | End to end | The built `tline` binary | Flags, root discovery, exit codes, JSON, stdout and stderr, effects across commands |
 
-Each test owns its temporary files, repository, Git identity, and environment, and needs no network. Concurrency tests use separate processes and explicit synchronization, not sleeps.
+Each test owns its temporary files and environment, and needs no network. Concurrency tests use separate processes and explicit synchronization, not sleeps.
 
 ### Data layout
 
 ```text
 my-project/
   timeline.yaml
-  .tline/            ignored by Git
+  .tline/            local runtime state, not shared
     lock
   goals/
   tasks/
@@ -73,4 +72,4 @@ my-project/
   predictions/
 ```
 
-Folders are chosen in `timeline.yaml`. Event files and `timeline.yaml` are tracked in Git; `.tline/` is not.
+Folders are chosen in `timeline.yaml`. Event files and `timeline.yaml` are the timeline; `.tline/` only holds the writer lock and can be deleted when no check is running. Projects that use version control should ignore `.tline/`.

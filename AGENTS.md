@@ -5,8 +5,8 @@ Start at the [primary goal](goals/primary-goal-build-timeline.md). It explains w
 - Keep Timeline reusable. Consumer-specific types, domain logic, and agent runtimes belong to the applications using it. `goal` and `task` are the only built-in types; examples are illustrative data.
 - Keep checked-in documentation independent of particular consumers. Private handoff notes belong in ignored local files; they must not be required to understand or implement Timeline.
 - Follow the Go core and `tline` CLI boundary in the [engineering foundation](goals/engineering-foundation.md). Do not build the TUI or other [later directions](goals/primary-goal-build-timeline.md#later-directions) unless asked, and do not make them harder.
-- Preserve the distinction between pending files and recorded events, and between event time and original entry time. Markdown, `timeline.yaml`, and Git history are the only stored state; there is no database.
-- Read recorded state through the core interface described in [query the timeline](goals/query-the-timeline.md#design), so a cache can be added later without changing behavior.
+- Preserve the distinction between drafts and recorded events, and between event time and original entry time. Markdown and `timeline.yaml` are the only stored state; there is no database and no version control requirement.
+- Read events through the core interface described in [query the timeline](goals/query-the-timeline.md#design), so the SQLite record store can be added later without changing behavior.
 - Preserve existing user work and unrelated staged changes. Keep dependencies modest and language simple.
 - Add application code only when implementation is requested.
 - Change behavior by editing the goal that owns it, or adding a goal or task linked from a parent's `## How`. Keep its `## Design` and `## Done when` in agreement; `## Done when` is what tests must demonstrate.

@@ -23,11 +23,11 @@ People rarely learn about things at the moment they happen. A report entered on 
 - Unit tests cover the equality boundaries of Past and Future, both edges of the Real-time delay, timestamp normalization, and whole-second precision.
 - A file that claims or changes `entered_at` or `entry_timing` is rejected.
 - Changing a type's rule in `timeline.yaml` does not change how already-recorded events are judged.
-- An open event becomes past due as the clock passes its date, and a moved date appears in history.
+- An open event becomes past due as the clock passes its date.
 
 ## Why it will work
 
-The entry time comes only from the clock at the moment of recording, never from the author, a dry run, or a file timestamp, so it cannot be backdated by mistake. Once recorded, the rule is frozen in the event's own file and history.
+The entry time comes only from the clock at the moment of recording, never from the author, a dry run, or a file timestamp, so it cannot be backdated by mistake. Once recorded, the rule is frozen in the event's own file.
 
 ## Design
 
@@ -53,7 +53,7 @@ A draft is validated as if it were recorded now, so a Future draft whose date ha
 
 For a new event, A is the time the check records it, read from an injected clock after validation succeeds and immediately before writing; never the command's start time, a dry run, a file timestamp, or a value in draft YAML.
 
-`entry_timing` is written into the file at first recording so a reader of the file alone can see whether the event was entered after, before, or as it happened. It is a copy of a recorded fact: the authoritative rule is the type's `entry_timing` in `timeline.yaml` at the event's first Timeline commit, and the two always agree.
+`entry_timing` is written into the file at first recording so a reader of the file alone can see whether the event was entered after, before, or as it happened. It is written once, from the type's rule at that moment, and is the authoritative rule for the event from then on: if the type's rule in `timeline.yaml` changes later, the event keeps the rule it was entered under.
 
 ### IDs and timestamps
 
@@ -66,4 +66,4 @@ The timing rule describes an event when it is first entered and does not change 
 
 ### Past due
 
-Where an event sits relative to now (past, upcoming, past due) is computed at read time and is separate from its entry timing rule. An event is **past due** when its type has `status`, its status is not closed, and its event time is before now. Past due is computed from the injected clock and never stored. It is not an error: the event stays valid and visible until someone closes it or moves its date. Moving a date is an ordinary update, so history shows every slip; for a Future event the new date must still be after the original `entered_at`.
+Where an event sits relative to now (past, upcoming, past due) is computed at read time and is separate from its entry timing rule. An event is **past due** when its type has `status`, its status is not closed, and its event time is before now. Past due is computed from the injected clock and never stored. It is not an error: the event stays valid and visible until someone closes it or moves its date. Moving a date is an ordinary edit; for a Future event the new date must still be after the original `entered_at`. Keeping a record of every slip is part of the [record store](primary-goal-build-timeline.md#later-directions).

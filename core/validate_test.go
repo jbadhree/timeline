@@ -204,8 +204,8 @@ func TestRecordedMetadata(t *testing.T) {
 
 	ok := check(t, news(id, stamp("entered_at", "2026-10-01T14:00:00Z"), str("entry_timing", "past")))
 	wantProblems(t, ok, "")
-	if len(ok.Unverified) != 1 || ok.Events[0].Draft || ok.Events[0].ID == "" {
-		t.Errorf("recorded event not reported as unverified: %+v", ok)
+	if ok.Events[0].Draft || ok.Events[0].ID == "" {
+		t.Errorf("stamped event not reported as recorded: %+v", ok)
 	}
 
 	wantProblems(t, check(t, news(id)), "news/n.md", "missing entered_at, entry_timing")

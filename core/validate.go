@@ -35,10 +35,6 @@ type EventResult struct {
 type CheckResult struct {
 	Events      []EventResult `json:"events"`
 	Diagnostics []Diagnostic  `json:"diagnostics"`
-	// Unverified lists events that carry recorded metadata (id, entered_at,
-	// entry_timing) that was checked for format and timing but not yet
-	// against Git history.
-	Unverified []string `json:"unverified"`
 }
 
 // Valid reports whether no diagnostics were found.
@@ -101,7 +97,7 @@ func (v *validator) result() CheckResult {
 		selected = func(p string) bool { return set[p] }
 	}
 
-	res := CheckResult{Events: []EventResult{}, Diagnostics: []Diagnostic{}, Unverified: []string{}}
+	res := CheckResult{Events: []EventResult{}, Diagnostics: []Diagnostic{}}
 	invalid := map[string]bool{}
 	for _, d := range v.diags {
 		if selected(d.Path) {
@@ -117,9 +113,6 @@ func (v *validator) result() CheckResult {
 		res.Events = append(res.Events, EventResult{
 			Path: e.doc.Path, Type: e.typ.Name, ID: e.id, Draft: e.draft, Valid: !invalid[e.doc.Path],
 		})
-		if !e.draft {
-			res.Unverified = append(res.Unverified, e.doc.Path)
-		}
 	}
 	return res
 }

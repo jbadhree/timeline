@@ -27,7 +27,7 @@ Much of what agents and people put on a timeline is intended work. A goal that s
 
 ## Why it will work
 
-Goals and tasks are ordinary recorded events with a fixed shape, so their views read the same recorded state as `list`, not a second store. Fixed section names make every goal readable the same way by people, agents, and the CLI.
+Goals and tasks are ordinary events with a fixed shape, so their views read the same files as `list`, not a second store. Fixed section names make every goal readable the same way by people, agents, and the CLI.
 
 ## Design
 
@@ -68,7 +68,7 @@ The goals in this folder are complete goal examples.
 
 ### Links and the tree
 
-Links in a goal's `## How` and `## Done when` are relative Markdown links to event files. When a goal is checked, each such link must resolve to an event that is recorded or recorded in the same check; links to other files, URLs, and anchors are allowed but are not steps. A link from a goal's `## How` to a goal or task makes it a **child**. Child links must not form a cycle. A task's `## How` may link to documents, URLs, or other events, but not to a goal or task, so tasks are always leaves.
+Links in a goal's `## How` and `## Done when` are relative Markdown links to event files. When a goal is checked, each such link must resolve to an event file in the root; links to other files, URLs, and anchors are allowed but are not steps. A link from a goal's `## How` to a goal or task makes it a **child**. Child links must not form a cycle. A task's `## How` may link to documents, URLs, or other events, but not to a goal or task, so tasks are always leaves.
 
 Views resolve links to event `id`s, so a link still identifies the event the goal meant after the linked file moves. A stale path in an unchanged goal is reported as broken, not silently dropped.
 
@@ -86,4 +86,4 @@ Achievement is for the owner to judge. An outcome validation is an ordinary futu
 | `tline task list` | Tasks by due date with status, owner, parent goal, and past-due flags |
 | `tline task show <id or path>` | One task as its five answers |
 
-The views read recorded events and the injected clock and never change files. They report pending changes separately and mark results incomplete, as `list` does.
+The views read the event files and the injected clock and never change files. They show drafts separately and mark results incomplete, as `list` does.

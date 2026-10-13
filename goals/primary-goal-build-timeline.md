@@ -18,8 +18,8 @@ Timeline gives agents, and the humans working with them, a sense of time. It rec
 - **A timeline is a perspective.** Like one person's memory of one subject: work, personal life, or a market. Each holds its own events in its own order. Initially one Timeline root holds one timeline.
 - **Events are Markdown files.** Each event is a readable document with YAML metadata, written with any editor by humans or agents. Users define their own event types: news, predictions, observations, or anything else worth remembering. See [events and types](events-and-types.md).
 - **Every event has two times.** When it happened or is expected (event time), and when it entered the timeline (entry time). Each type has an entry timing rule: Past (learned after the fact), Future (entered in advance), or Real-time (entered as it happens). Future events can go past due. See [two times and timing rules](two-times-and-timing.md).
-- **Recording is explicit.** `tline check` validates edited files and records them in a Git commit, stamping each new event's ID and entry time. Until then a change is pending. See [recording](record-events.md) and [history](event-history.md).
-- **There is no database.** Markdown, `timeline.yaml`, and Git history are the only stored state; every command reads them directly. See [querying](query-the-timeline.md).
+- **Recording is explicit.** `tline check` validates files and stamps each new event with its ID, entry time, and timing rule. Until then the file is a draft. See [recording](record-events.md).
+- **Plain files, nothing else.** Markdown and `timeline.yaml` are the only stored state; there is no database and no version control requirement. Every command reads the files directly. See [querying](query-the-timeline.md).
 - **Goals and tasks are built in.** A goal answers seven questions: what, why, by when, how, how we know it is done, why it will work, and who owns it. A task is a simpler step whose result is obvious. See [goals and tasks](goals-and-tasks.md).
 
 ```text
@@ -27,9 +27,9 @@ Humans and agents edit Markdown files
                   |
           tline check (validate and record)
                   |
-   Recorded Markdown + timeline.yaml in Git commits
+   Recorded Markdown files + timeline.yaml
                   |
-   tline list / history / goal / task (read files and Git)
+   tline list / goal / task (read the files)
 ```
 
 This repository is itself a Timeline root. [`timeline.yaml`](../timeline.yaml) enables goals and tasks, and the `goals/` and `tasks/` folders hold this plan. Once `tline` exists, `tline goal tree` shows this goal down to its tasks.
@@ -46,7 +46,6 @@ Planning Timeline as Timeline goals and tasks proves the goal format on real wor
 - [Events and types](events-and-types.md)
 - [Two times and timing rules](two-times-and-timing.md)
 - [Record events with `tline check`](record-events.md)
-- [Event history](event-history.md)
 - [Query the timeline](query-the-timeline.md)
 - [Goals and tasks](goals-and-tasks.md)
 - [Build release executables](../tasks/build-release-executables.md)
@@ -60,23 +59,22 @@ Planning Timeline as Timeline goals and tasks proves the goal format on real wor
 
 ## Why it will work
 
-Recording and reading are the whole loop, and goals and tasks are views over the same recorded events, so each part builds on tested ground. Git already provides durable, distributed history; Timeline adds rules on top instead of building its own store. Using the goal format to build the tool exposes gaps in it early.
+Recording and reading are the whole loop, and goals and tasks are views over the same recorded events, so each part builds on tested ground. Plain files keep the first version small and usable in any folder, with any editor and any sync tool. Using the goal format to build the tool exposes gaps in it early.
 
 ## Principles
 
 - **Reusable.** Timeline imports no consumer application. Consumer-specific types, domain logic, and agent runtimes belong to the applications using it; `goal` and `task` are the only built-in types.
 - **Records, does not judge.** Timeline checks that events are complete and that their timing fits their type. It does not decide whether a claim is true or a prediction came true; a later event records that assessment.
-- **Files are the truth.** Markdown, `timeline.yaml`, and Git history are authoritative and readable without Timeline, so changing the software that reads them loses nothing.
-- **Pending is not recorded, and event time is not entry time.** These two distinctions are never blurred.
+- **Files are the truth.** Markdown and `timeline.yaml` are authoritative and readable without Timeline, so changing the software that reads them loses nothing. Keeping them in version control is up to the user; Timeline neither requires nor uses it.
+- **A draft is not a recorded event, and event time is not entry time.** These two distinctions are never blurred.
 - **Many writers, no silent overwrites.** Multiple writers must not silently overwrite one another's recorded changes.
 
 ## Command line
 
 | Command | Purpose |
 | --- | --- |
-| `tline check [paths...]` | Validate pending changes and, if all pass, record them in one Git commit |
-| `tline list` | List recorded events with time and field filters, file paths, past-due flags, and pending changes |
-| `tline history <id>` | Show an event's recorded revisions, including moves and removal |
+| `tline check [paths...]` | Validate files and, if all pass, stamp new drafts with their ID, entry time, and timing rule |
+| `tline list` | List events with time and field filters, file paths, past-due flags, and drafts shown separately |
 | `tline goal list`, `goal show`, `goal tree` | Goal views |
 | `tline task list`, `task show` | Task views |
 
@@ -94,8 +92,8 @@ Intended, not planned yet. Current decisions should not make them harder.
 - **Agent views:** "now" (recent, in progress, upcoming, past due), "as of a date" (only what had been entered by then), and a compact summary an agent can load as context.
 - **Learning data export:** predictions paired with what was known when they were made and with later outcome or assessment events.
 - **Link graph:** building and traversing the graph formed by all Markdown links.
-- **Integrity:** tamper evidence such as signed commits or external timestamps. Initially, entry times protect against honest mistakes, not deliberate rewriting.
-- **A cache**, such as a SQLite database, for timelines too large to read directly, rebuildable from the files and Git.
+- **Record store and history:** a SQLite database that `tline check` writes alongside the files, recording every stamp and every version it sees. It would detect stamps typed or edited by hand, keep removed events and earlier versions, and power `tline history <id>`. It also makes reads fast for large timelines. Until it exists, entry times protect against honest mistakes only.
+- **Integrity:** stronger tamper evidence, such as signed records or external timestamps.
 - **A TUI** and other front ends built on the same core.
 
 ## Changing the plan
