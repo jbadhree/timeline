@@ -15,3 +15,4 @@ status: open
 - `goal list`: goals by target date with status, owner, and past-due flags.
 - `goal show`: the seven answers, with every linked step's type, status, and past-due flag.
 - `goal tree`: goals and tasks depth first in How order, with `--json`.
+- Build it inside the goals plugin, as plugin commands rather than core code.

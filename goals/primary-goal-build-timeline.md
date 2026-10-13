@@ -23,7 +23,7 @@ Timeline gives agents, and the humans working with them, a sense of time. It rec
 - **Every event has two times.** When it happened or is expected (event time), and when it entered the timeline (entry time). Each type has an entry timing rule: Past (learned after the fact), Future (entered in advance), or Real-time (entered as it happens). Future events can go past due. See [two times and timing rules](two-times-and-timing.md).
 - **Recording is explicit.** `tline check` validates files and stamps each new event with its ID, entry time, and timing rule. Until then the file is a draft. See [recording](record-events.md).
 - **Plain files, nothing else.** Markdown and `timeline.yaml` are the only stored state; there is no database and no version control requirement. Every command reads the files directly. See [querying](query-the-timeline.md).
-- **Goals and tasks are built in.** A goal answers seven questions: what, why, by when, how, how we know it is done, why it will work, and who owns it. Every step in a goal's how is another goal or a task, so all work is tracked down to tasks: simpler steps whose result is obvious. See [goals and tasks](goals-and-tasks.md).
+- **Goals and tasks ship as a built-in plugin.** [Plugins](plugins.md) add types, rules, and commands on top of the core. A goal answers seven questions: what, why, by when, how, how we know it is done, why it will work, and who owns it. Every step in a goal's how is another goal or a task, so all work is tracked down to tasks: simpler steps whose result is obvious. See [goals and tasks](goals-and-tasks.md).
 
 ```text
 Humans and agents edit Markdown files
@@ -52,6 +52,7 @@ Decided in [plan with goals](../decisions/plan-with-goals.md).
 - [Two times and timing rules](two-times-and-timing.md)
 - [Record events with `tline check`](record-events.md)
 - [Query the timeline](query-the-timeline.md)
+- [Plugins](plugins.md)
 - [Goals and tasks](goals-and-tasks.md)
 - [Build release executables](../tasks/build-release-executables.md)
 - [Run the first-release demo](../tasks/run-first-release-demo.md)
@@ -68,7 +69,7 @@ Recording and reading are the whole loop, and goals and tasks are views over the
 
 ## Principles
 
-- **Reusable.** Timeline imports no consumer application. Consumer-specific types, domain logic, and agent runtimes belong to the applications using it; `goal` and `task` are the only built-in types.
+- **Reusable.** Timeline imports no consumer application. Consumer-specific types, domain logic, and agent runtimes belong to the applications using it; `goal` and `task` come from the built-in goals plugin; every other type is configured or comes from a plugin.
 - **Records, does not judge.** Timeline checks that events are complete and that their timing fits their type. It does not decide whether a claim is true or a prediction came true; a later event records that assessment.
 - **Files are the truth.** Markdown and `timeline.yaml` are authoritative and readable without Timeline, so changing the software that reads them loses nothing. Keeping them in version control is up to the user; Timeline neither requires nor uses it.
 - **A draft is not a recorded event, and event time is not entry time.** These two distinctions are never blurred.

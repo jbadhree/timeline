@@ -14,3 +14,4 @@ status: open
 
 - Resolve links to event IDs so the tree survives moved files.
 - Report broken links and missing answers instead of hiding them.
+- Build it inside the goals plugin, from the resolved links the core provides.

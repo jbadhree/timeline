@@ -5,7 +5,7 @@ entry_timing: future
 type: goal
 timeline_at: 2026-12-19T23:59:59Z
 created_by: claude
-goal: Make goals and tasks built-in types with their own views
+goal: Give goals and tasks their rules and views, as the built-in goals plugin
 owner: Badhree Babu
 status: open
 ---
@@ -14,7 +14,7 @@ status: open
 
 Much of what agents and people put on a timeline is intended work. A goal that states what, why, by when, how, how we will know, why it will work, and who owns it can be checked for completeness, broken into smaller goals and tasks, and followed until it is achieved or goes past due. This plan is the first user.
 
-Decided in [goals and tasks are built in](../decisions/goals-and-tasks-built-in.md) and [every goal step must link](../decisions/goal-steps-must-link.md); their link rules move to a plugin per [link meanings belong to plugins](../decisions/relations-in-plugins.md).
+Decided in [goal and task ship as a built-in plugin](../decisions/goals-and-tasks-as-plugin.md) and [every goal step must link](../decisions/goal-steps-must-link.md). The rules and views live in the goals plugin described in [plugins](plugins.md).
 
 ## How
 
@@ -38,6 +38,8 @@ Goals and tasks are ordinary events with a fixed shape, so their views read the 
 ## Design
 
 ### The two types
+
+Both types come from the built-in goals [plugin](plugins.md). Until the plugin interface exists, their rules are compiled into the core; moving them changes where the rules live, not what they check.
 
 A goal is something we intend to achieve by a date. A task is work whose result is obvious: we know when it is done, and it needs no explanation. "List the files in a folder: run `ls`" is a task, not a goal. Both use the Future rule.
 

@@ -2,7 +2,7 @@
 
 Timeline gives agents, and the humans working with them, a sense of time. It records events on a timeline with two times for each: when the event happened (or is expected), and when it entered the timeline. News is learned after the fact, predictions are made in advance, and live observations are recorded as they happen. Future events, such as tasks and goals, can go past due.
 
-Events are Markdown files with YAML metadata, edited by humans and agents with any tool. Users define their own event types and Past, Future, or Real-time entry rules. Goals and tasks are built in: a goal answers what, why, by when, how, how we know it is done, why it will work, and who owns it; a task is a simpler step whose result is obvious.
+Events are Markdown files with YAML metadata, edited by humans and agents with any tool. Users define their own event types and Past, Future, or Real-time entry rules. Goals and tasks ship as a built-in plugin: a goal answers what, why, by when, how, how we know it is done, why it will work, and who owns it; a task is a simpler step whose result is obvious.
 
 ## Start here
 

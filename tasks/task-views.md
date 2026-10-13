@@ -14,3 +14,4 @@ status: open
 
 - `task list`: tasks by due date with status, owner, parent goal, and past-due flags.
 - `task show`: the five answers, with the why inherited from parent goals.
+- Build it inside the goals plugin, as plugin commands rather than core code.

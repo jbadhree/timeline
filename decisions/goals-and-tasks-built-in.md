@@ -7,7 +7,7 @@ timeline_at: 2026-10-13T00:19:05Z
 created_by: claude
 decision: Make goal and task built-in types with their own commands
 decided_by: Badhree Babu
-status: current
+status: superseded
 ---
 
 ## Context
@@ -17,3 +17,7 @@ Much of what goes on a timeline is intended work, and a fixed shape lets the CLI
 ## Consequences
 
 `goal` and `task` are reserved type names. A later plugin system may move them into a built-in plugin without changing their files.
+
+## Superseded by
+
+- [Goal and task ship as a built-in plugin, not as core types](goals-and-tasks-as-plugin.md)
