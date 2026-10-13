@@ -6,9 +6,9 @@ name: timeline
 
 types:
   goal:
-    folder: goals # built-in type
+    folder: goals # from the built-in goals plugin
   task:
-    folder: tasks # built-in type
+    folder: tasks # from the built-in goals plugin
 
   decision:
     folder: decisions
