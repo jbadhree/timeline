@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-var tlineBin string
+var tlineBin, fakePluginBin string
 
 func TestMain(m *testing.M) {
 	os.Exit(buildAndRun(m))
@@ -37,6 +37,12 @@ func buildAndRun(m *testing.M) int {
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "building tline: %v\n%s", err, out)
+		return 1
+	}
+	fakePluginBin = filepath.Join(dir, "fakeplugin")
+	buildFake := exec.Command("go", "build", "-o", fakePluginBin, "github.com/jbadhree/timeline/tests/e2e/fakeplugin")
+	if out, err := buildFake.CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "building fakeplugin: %v\n%s", err, out)
 		return 1
 	}
 	return m.Run()

@@ -19,3 +19,20 @@ Day 1, 2026-10-01:
 | 15:00 | 2026-12-31 23:59:59 | prediction | [NVDA all-time high](markets/predictions/2026-10-01-nvda-all-time-high.md) |
 
 The prediction links to the news with an ordinary Markdown link. Its `beliefs` are plain strings referring to the consumer's own world model; Timeline stores them without interpreting them. Its event time is a placeholder horizon by which the prediction should come true.
+
+## plugins
+
+[`plugins/timeline.yaml`](plugins/timeline.yaml) uses two external plugins, described in [Writing a plugin](../docs/plugins.md):
+
+- [`tools/tline-predictions`](plugins/tools/tline-predictions), in Python, provides a `prediction` type. A `window_start` must come before the event time, a closed prediction needs `## Outcome`, and `tline prediction due` lists open predictions whose time has passed.
+- [`incidents`](plugins/incidents/main.go), in Go, provides an `incident` type. A high-severity incident needs `## Follow-up`, a resolved one needs `## Resolution`, and `tline incident open` lists open incidents.
+
+Build the Go plugin, approve both, and try them:
+
+```sh
+go build -o examples/plugins/tools/tline-incidents ./examples/plugins/incidents
+cd examples/plugins
+tline plugins trust
+tline check
+tline incident open
+```

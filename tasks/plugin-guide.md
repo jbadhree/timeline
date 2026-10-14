@@ -7,7 +7,7 @@ timeline_at: 2026-10-24T23:59:59Z
 created_by: claude
 task: Write the plugin guide and protocol reference
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

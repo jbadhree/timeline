@@ -98,11 +98,16 @@ func runHistory(ctx context.Context, opts Options, args []string, stdout, stderr
 		diagnose(stderr, "%v", err)
 		return ExitFailure
 	}
-	cfg, err := config.Load(root, plugins())
+	tl, err := loadTimeline(ctx, root, stderr)
 	if err != nil {
-		diagnose(stderr, "%v", err)
-		return ExitValidation
+		var cerr *config.Error
+		if errors.As(err, &cerr) {
+			diagnose(stderr, "%v", err)
+			return ExitValidation
+		}
+		return reportLoadError(err, opts.JSON, stdout, stderr)
 	}
+	cfg := tl.cfg
 	docs, _, err := document.Scan(ctx, root, cfg)
 	if err != nil {
 		diagnose(stderr, "%v", err)

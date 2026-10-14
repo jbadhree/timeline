@@ -12,3 +12,6 @@
 
 # Release archives built by make release.
 /dist/
+
+# Example plugin binary built from examples/plugins/incidents.
+/examples/plugins/tools/tline-incidents

@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""An example external tline plugin, in Python, using only the standard library.
+
+It provides a "prediction" type, rules that timeline.yaml alone cannot
+express, and a "prediction due" command. See docs/plugins.md.
+"""
+import json
+import sys
+
+DESCRIBE = {
+    "name": "predictions",
+    "protocols": [1],
+    "types": [{
+        "name": "prediction",
+        "entry_timing": "future",
+        "fields": {
+            "claim": {"type": "string", "required": True},
+            "window_start": {"type": "time"},
+        },
+        "status": {"values": ["open", "correct", "wrong"], "closed": ["correct", "wrong"]},
+    }],
+    "validates": True,
+    "commands": [{
+        "name": "prediction",
+        "summary": "list predictions that are due",
+        "usage": "Usage:\n  tline prediction due   list open predictions whose time has passed\n",
+    }],
+}
+
+
+def validate(req):
+    diagnostics = []
+    for event in req["events"]:
+        if event["type"] != "prediction":
+            continue
+        fields, lines = event["fields"], event["field_lines"]
+        start = fields.get("window_start")
+        # Timestamps arrive as RFC 3339 strings; tline has already checked
+        # their format. Compare them as instants via a normalized UTC form.
+        if start and event.get("time") and to_utc(start) >= event["time"]:
+            diagnostics.append({
+                "path": event["path"], "line": lines.get("window_start", 0), "field": "window_start",
+                "message": "must be before the prediction's event time",
+            })
+        headings = {s["heading"] for s in event["sections"]}
+        if fields.get("status") in ("correct", "wrong") and "Outcome" not in headings:
+            diagnostics.append({
+                "path": event["path"], "section": "Outcome",
+                "message": "is required once a prediction is closed",
+            })
+    return {"diagnostics": diagnostics}
+
+
+def to_utc(stamp):
+    from datetime import datetime, timezone
+    when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    return when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def command(req):
+    if req["args"] != ["due"]:
+        return {"usage_error": "expected 'due'"}
+    due = sorted(
+        (e for e in req["events"] if e["type"] == "prediction" and e["past_due"]),
+        key=lambda e: e["time"],
+    )
+    text = "".join(f"{e['time'][:10]}  {e['fields'].get('claim', '')}  ({e['path']})\n" for e in due)
+    return {
+        "text": text or "No predictions are due.\n",
+        "json": {"due": [{"path": e["path"], "time": e["time"], "claim": e["fields"].get("claim")} for e in due]},
+        "incomplete": bool(req["diagnostics"]),
+    }
+
+
+def main():
+    req = json.load(sys.stdin)
+    handlers = {"describe": lambda r: DESCRIBE, "validate": validate, "command": command}
+    json.dump(handlers[req["request"]](req), sys.stdout)
+
+
+if __name__ == "__main__":
+    main()

@@ -81,11 +81,63 @@ func (e *Error) Error() string {
 // Load reads and decodes root/timeline.yaml. An invalid file returns *Error.
 // plugins provide type templates; see Decode.
 func Load(root string, plugins []core.Plugin) (*core.Config, error) {
+	return LoadWith(root, plugins, nil)
+}
+
+// LoadWith is Load with a Resolver for external plugins; see DecodeWith.
+func LoadWith(root string, plugins []core.Plugin, resolve Resolver) (*core.Config, error) {
 	data, err := os.ReadFile(filepath.Join(root, FileName))
 	if err != nil {
 		return nil, err
 	}
-	return Decode(data, plugins)
+	return DecodeWith(data, plugins, resolve)
+}
+
+// ExternalPlugin is an external plugin entry in timeline.yaml:
+// "- name: { run: ./tools/plugin, timeout: 10s }".
+type ExternalPlugin struct {
+	Name    string
+	Run     string        // a path relative to the root, or a program on PATH
+	Timeout time.Duration // zero means the default
+}
+
+// Resolver turns a timeline's external plugin entries into plugins, in the
+// same order. It may refuse, for example because the user has not approved
+// them; its error is returned by DecodeWith unchanged.
+type Resolver func(specs []ExternalPlugin) ([]core.Plugin, error)
+
+// ExternalPlugins returns the external plugin entries of timeline.yaml
+// content, as written, without running anything or checking the rest of the
+// file. Malformed entries are skipped; Decode reports them.
+func ExternalPlugins(data []byte) ([]ExternalPlugin, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, nil
+	}
+	top := doc.Content[0]
+	var list *yaml.Node
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		if top.Content[i].Value == "plugins" {
+			list = top.Content[i+1]
+		}
+	}
+	if list == nil || list.Kind != yaml.SequenceNode {
+		return nil, nil
+	}
+	d := &decoder{available: map[string]core.Plugin{}}
+	var out []ExternalPlugin
+	for _, item := range list.Content {
+		if item.Kind != yaml.MappingNode {
+			continue
+		}
+		if spec, ok := d.decodeExternal(item); ok {
+			out = append(out, spec)
+		}
+	}
+	return out, nil
 }
 
 // Decode decodes timeline.yaml content. An invalid file returns *Error.
@@ -97,12 +149,22 @@ func Load(root string, plugins []core.Plugin) (*core.Config, error) {
 // may add fields, sections, and validators, but cannot set its timing,
 // status, or the template's own fields.
 func Decode(data []byte, available []core.Plugin) (*core.Config, error) {
-	d := &decoder{available: map[string]core.Plugin{}}
+	return DecodeWith(data, available, nil)
+}
+
+// DecodeWith is Decode for a timeline whose "plugins" list may name external
+// plugins. resolve is called once with all of them, before types are built; a
+// nil resolve rejects external plugins.
+func DecodeWith(data []byte, available []core.Plugin, resolve Resolver) (*core.Config, error) {
+	d := &decoder{available: map[string]core.Plugin{}, resolve: resolve}
 	for _, p := range available {
 		d.available[p.Name()] = p
 		d.availableOrder = append(d.availableOrder, p.Name())
 	}
 	cfg := d.decode(data)
+	if d.resolveErr != nil {
+		return nil, d.resolveErr
+	}
 	if len(d.diags) > 0 {
 		core.SortDiagnostics(d.diags)
 		return nil, &Error{Diagnostics: d.diags}
@@ -111,6 +173,9 @@ func Decode(data []byte, available []core.Plugin) (*core.Config, error) {
 }
 
 type decoder struct {
+	resolve    Resolver
+	resolveErr error // a Resolver's refusal, returned as is
+
 	diags          []core.Diagnostic
 	available      map[string]core.Plugin
 	availableOrder []string
@@ -217,6 +282,9 @@ func (d *decoder) decode(data []byte) *core.Config {
 		}
 	}
 	d.decodePlugins(pluginsNode)
+	if d.resolveErr != nil {
+		return cfg
+	}
 	cfg.Plugins = d.enabled
 	if !hasVersion {
 		d.errf(doc.Content[0], "version is required")
@@ -390,9 +458,13 @@ func (d *decoder) decodePlugins(n *yaml.Node) {
 	} else if n.Kind != yaml.SequenceNode {
 		d.errf(n, "plugins must be a list of plugin names")
 	} else {
+		var external []ExternalPlugin
 		for _, item := range n.Content {
 			if item.Kind == yaml.MappingNode {
-				d.errf(item, "external plugins are not supported yet; list built-in plugins by name (available: %s)", strings.Join(d.availableOrder, ", "))
+				if spec, ok := d.decodeExternal(item); ok {
+					external = append(external, spec)
+					d.enabled = append(d.enabled, spec.Name)
+				}
 				continue
 			}
 			name, ok := d.str(item, "plugins item")
@@ -406,6 +478,20 @@ func (d *decoder) decodePlugins(n *yaml.Node) {
 				d.enabled = append(d.enabled, name)
 			}
 		}
+		if len(external) > 0 && len(d.diags) == 0 {
+			if d.resolve == nil {
+				d.errf(n, "external plugins are not available here")
+				return
+			}
+			plugins, err := d.resolve(external)
+			if err != nil {
+				d.resolveErr = err
+				return
+			}
+			for i, p := range plugins {
+				d.available[external[i].Name] = p
+			}
+		}
 	}
 
 	d.templates, d.byName = map[string]core.TypeDef{}, map[string][]string{}
@@ -417,6 +503,10 @@ func (d *decoder) decodePlugins(n *yaml.Node) {
 		for _, t := range tp.Types() {
 			if !validName(t.Name) || !t.Timing.Valid() {
 				d.errf(n, "plugin %s provides type %q without a valid name and timing rule", name, t.Name)
+				continue
+			}
+			if keys := d.byName[t.Name]; len(keys) > 0 {
+				d.errf(n, "type %q is provided by both plugin %s and plugin %s; use only one of them", t.Name, d.templates[keys[0]].Plugin, name)
 				continue
 			}
 			t.Plugin = name
@@ -475,7 +565,7 @@ func (d *decoder) decodeValidators(n *yaml.Node, what, own string) []string {
 	var out []string
 	for _, name := range names {
 		p := d.available[name]
-		switch _, validates := p.(core.Validator); {
+		switch validates := validatesRules(p); {
 		case p == nil:
 			d.errf(n, "%s: unknown validator plugin %q", what, name)
 		case !contains(d.enabled, name):
@@ -624,4 +714,56 @@ func contains(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// decodeExternal reads "name: { run: ..., timeout: ... }".
+func (d *decoder) decodeExternal(item *yaml.Node) (ExternalPlugin, bool) {
+	if len(item.Content) != 2 {
+		d.errf(item, "an external plugin is written as - name: { run: ./path/to/program }")
+		return ExternalPlugin{}, false
+	}
+	k, v := item.Content[0], item.Content[1]
+	spec := ExternalPlugin{Name: k.Value}
+	what := "plugin " + spec.Name
+	switch {
+	case !validName(spec.Name):
+		d.errf(k, "plugin name %q must use lowercase letters, digits, and underscores", spec.Name)
+		return spec, false
+	case d.available[spec.Name] != nil:
+		d.errf(k, "plugin %q is a built-in plugin; give the external plugin another name", spec.Name)
+		return spec, false
+	case contains(d.enabled, spec.Name):
+		d.errf(k, "plugin %q is listed twice", spec.Name)
+		return spec, false
+	}
+	hasRun := false
+	for _, kv := range d.pairs(v, what, "run", "timeout") {
+		switch kv[0].Value {
+		case "run":
+			spec.Run, hasRun = d.str(kv[1], what+": run")
+		case "timeout":
+			if s, ok := d.str(kv[1], what+": timeout"); ok {
+				t, err := time.ParseDuration(s)
+				if err != nil || t <= 0 {
+					d.errf(kv[1], "%s: timeout must be a positive duration such as 10s", what)
+				}
+				spec.Timeout = t
+			}
+		}
+	}
+	if !hasRun {
+		d.errf(v, "%s: run is required", what)
+		return spec, false
+	}
+	return spec, true
+}
+
+// validatesRules reports whether a plugin has validation rules. External
+// plugins say so when described; built-in ones by implementing Validator.
+func validatesRules(p core.Plugin) bool {
+	if v, ok := p.(interface{ Validates() bool }); ok {
+		return v.Validates()
+	}
+	_, ok := p.(core.Validator)
+	return ok
 }

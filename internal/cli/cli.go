@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"runtime/debug"
+
+	"github.com/jbadhree/timeline/internal/plugins/external"
 )
 
 // Exit codes returned by Run.
@@ -48,6 +50,7 @@ Flags:
 Commands:
   check           validate event files, stamp new drafts, and save history
   history         list or print the saved versions of an event
+  plugins         review and approve this timeline's external plugins
   help            print this help
 
 Run 'tline <command> --help' for a command's flags.
@@ -56,6 +59,7 @@ Run 'tline <command> --help' for a command's flags.
 // Run executes tline with args (excluding the program name) and returns the
 // process exit code. ctx carries cancellation from the caller.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	describedPlugins = map[string]*external.Plugin{}
 	var opts Options
 	var showVersion bool
 	fs := flag.NewFlagSet("tline", flag.ContinueOnError)
@@ -66,7 +70,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return writeOut(stdout, stderr, usage+pluginUsage())
+			return writeOut(stdout, stderr, usage+pluginUsage(ctx, opts, stderr))
 		}
 		return usageError(stderr, err.Error())
 	}
@@ -81,21 +85,15 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	switch rest[0] {
 	case "help":
-		return writeOut(stdout, stderr, usage+pluginUsage())
+		return writeOut(stdout, stderr, usage+pluginUsage(ctx, opts, stderr))
 	case "check":
 		return runCheck(ctx, opts, rest[1:], stdout, stderr)
 	case "history":
 		return runHistory(ctx, opts, rest[1:], stdout, stderr)
+	case "plugins":
+		return runPlugins(opts, rest[1:], stdout, stderr)
 	}
-	cmds, err := pluginCommands()
-	if err != nil {
-		diagnose(stderr, "%v", err)
-		return ExitFailure
-	}
-	if pc, ok := cmds[rest[0]]; ok {
-		return runPluginCommand(ctx, opts, pc, rest[1:], stdout, stderr)
-	}
-	return usageError(stderr, fmt.Sprintf("unknown command %q", rest[0]))
+	return runNamedCommand(ctx, opts, rest[0], rest[1:], stdout, stderr)
 }
 
 func usageError(stderr io.Writer, msg string) int {

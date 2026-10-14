@@ -162,7 +162,7 @@ func TestPluginTemplateProblems(t *testing.T) {
 		t.Fatal("want an error")
 	}
 	for _, want := range []string{
-		`type "goal" is provided by both plugin fake and plugin other; use from: to choose one`,
+		`type "goal" is provided by both plugin fake and plugin other; use only one of them`,
 		`plugin other provides type "broken" without a valid name and timing rule`,
 	} {
 		if !strings.Contains(err.Error(), want) {
@@ -198,7 +198,7 @@ func TestPluginsList(t *testing.T) {
 	for _, tc := range []struct{ yaml, want string }{
 		{"plugins: [nope]", `unknown plugin "nope" (available: fake, lint)`},
 		{"plugins: [fake, fake]", `plugin "fake" is listed twice`},
-		{"plugins: [{ ticker: { run: ./check } }]", "external plugins are not supported yet"},
+		{"plugins: [{ ticker: { run: ./check } }]", "external plugins are not available here"},
 		{"plugins: fake", "plugins must be a list"},
 	} {
 		_, err := Decode([]byte("version: 1\n"+tc.yaml+"\ntypes: {}\n"), all)
@@ -237,11 +237,12 @@ types:
 	}
 }
 
-func TestFromResolvesAmbiguity(t *testing.T) {
+func TestTwoPluginsProvidingOneTypeIsAnError(t *testing.T) {
+	// Even with from: choosing one, the clash is a configuration error.
 	both := []core.Plugin{templates{}, badTemplates{name: "other"}}
 	_, err := Decode([]byte("version: 1\nplugins: [fake, other]\ntypes:\n  goal: { from: other/goal, folder: goals }\n"), both)
-	if err == nil || strings.Contains(err.Error(), "provided by both") {
-		t.Fatalf("from: should resolve the ambiguity (the other error is the bad template): %v", err)
+	if err == nil || !strings.Contains(err.Error(), `type "goal" is provided by both plugin fake and plugin other`) {
+		t.Fatalf("got %v", err)
 	}
 }
 

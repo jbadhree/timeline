@@ -1,0 +1,13 @@
+# Example Timeline root with two external plugins. See examples/README.md and
+# docs/plugins.md. Build the Go plugin first:
+#   go build -o examples/plugins/tools/tline-incidents ./examples/plugins/incidents
+version: 1
+name: plugins-example
+
+plugins:
+  - predictions: { run: ./tools/tline-predictions } # Python
+  - incidents: { run: ./tools/tline-incidents, timeout: 5s } # Go
+
+types:
+  prediction: { from: predictions/prediction, folder: predictions }
+  incident: { from: incidents/incident, folder: incident-log }

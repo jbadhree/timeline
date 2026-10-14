@@ -7,7 +7,7 @@ timeline_at: 2026-12-05T23:59:59Z
 created_by: claude
 task: Run external validator plugins over a JSON protocol
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

@@ -6,3 +6,4 @@ This folder is for supporting material that is not a goal or task. Nothing here 
 
 - [Quickstart](quickstart.md): how to use `tline`, for people.
 - [Instructions for agents](agents.md): the same, for AI agents.
+- [Writing a plugin](plugins.md): external plugins, approval, and the protocol reference.

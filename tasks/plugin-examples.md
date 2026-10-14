@@ -7,7 +7,7 @@ timeline_at: 2026-10-24T23:59:59Z
 created_by: claude
 task: Add example external plugins in Python and Go
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

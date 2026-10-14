@@ -207,6 +207,7 @@ Unknown fields are errors, so typos such as `onwer` are caught. Add `--json` to 
 | 3 | Validation failed; nothing was written |
 | 4 | Another check is running (`.tline/lock`), or a file changed during the check |
 | 5 | A view's result is incomplete because some events are invalid |
+| 6 | The timeline's external plugins are not approved; see [plugins](plugins.md#approval) |
 
 ## 7. More on types
 
@@ -280,3 +281,7 @@ predictions/launch.md (prediction, id 01M4VX7DG01B4M1KAYWRQBDYRP)
 `tline history launch --version 1` prints a version exactly, and `--json` works too. Name the event by its ID, path, or file name; a removed event is still found by its ID.
 
 The copies live in `history/` next to `timeline.yaml`, as `history/predictions/<id>/v1.md`, `v2.md`, and a `versions.log`. Keep `history/` with your timeline, for example by committing it, and never edit it. A file with no changes gets no copy, moving a file keeps its history, and turning history on for a type with recorded events copies each of them as v1 at the next check.
+
+## 9. Plugins
+
+When `timeline.yaml` cannot express a rule, for example a section required only once a prediction is closed, or you want your own command, write a plugin: a small program in any language that `tline` runs. See [Writing a plugin](plugins.md). `tline` runs a timeline's plugins only after you approve them with `tline plugins trust`.

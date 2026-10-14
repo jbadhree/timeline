@@ -6,6 +6,7 @@ Start at the [primary goal](goals/primary-goal-build-timeline.md). It explains w
 - Keep checked-in documentation independent of particular consumers. Private handoff notes belong in ignored local files; they must not be required to understand or implement Timeline.
 - Follow the Go core and `tline` CLI boundary in the [engineering foundation](goals/engineering-foundation.md). Do not build the TUI or other [later directions](goals/primary-goal-build-timeline.md#later-directions) unless asked, and do not make them harder.
 - Preserve the distinction between drafts and recorded events, and between event time and original entry time. Markdown and `timeline.yaml` are the only stored state; there is no database and no version control requirement.
+- External plugins run only after the user approves them (`tline plugins trust`); never approve a timeline's plugins, or set `TLINE_TRUST_PLUGINS=1`, on the user's behalf. See [docs/agents.md](docs/agents.md#external-plugins-and-approval).
 - Read events through the core interface described in [query the timeline](goals/query-the-timeline.md#design), so the SQLite record store can be added later without changing behavior.
 - Preserve existing user work and unrelated staged changes. Keep dependencies modest and language simple.
 - Add application code only when implementation is requested.

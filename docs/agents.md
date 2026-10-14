@@ -55,6 +55,7 @@ Each diagnostic names a file and, where known, a line and a `field` or `section`
 | 3 | Validation failed; nothing was written | Fix the diagnostics and check again |
 | 4 | Another check holds the lock, or a file changed during the check | Wait and run the check again |
 | 5 | A view is incomplete because some events are invalid | Run `tline check` and fix them |
+| 6 | The timeline's external plugins are not approved, or changed since approval | Help your user review them; see below |
 
 ## Reading the timeline
 
@@ -64,3 +65,14 @@ Each diagnostic names a file and, where known, a line and a `field` or `section`
 - `tline history <id|path|name> --json` lists an event's saved versions and what changed in each; add `--version N` to read one
 
 Name a goal or task by its `id`, its path, or its file name without `.md`.
+
+## External plugins and approval
+
+A timeline can name external plugins in `timeline.yaml`: programs that `tline` runs to check events and to provide commands. They run with the user's permissions, so `tline` runs them only after the user approves them for that timeline. When a command exits 6:
+
+1. **Do not approve the plugins yourself.** Do not run `tline plugins trust --yes`, and do not set `TLINE_TRUST_PLUGINS=1`, unless your user explicitly tells you to.
+2. Run `tline plugins` to list each plugin, the program it runs, and where that program is.
+3. Read each program inside the timeline and summarize it for your user: what it checks, and whether it reads files outside the timeline, uses the network, runs other programs, or changes anything. Say plainly if you cannot tell. For a program found on `PATH`, say what you know about it and that its code is not in the timeline.
+4. Ask your user whether to approve them. They can run `tline plugins trust` themselves, or tell you to run `tline plugins trust --yes`.
+
+If the plugins were approved before, `tline` reports that they changed: show your user what changed in `timeline.yaml` or in the program before asking again. To write a plugin, see [Writing a plugin](plugins.md).

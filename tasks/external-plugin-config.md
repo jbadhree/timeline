@@ -7,7 +7,7 @@ timeline_at: 2026-10-21T23:59:59Z
 created_by: claude
 task: Configure external plugins in timeline.yaml
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How
