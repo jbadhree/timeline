@@ -39,8 +39,20 @@ func fixedEffects(t *testing.T) {
 	t.Helper()
 	oldNow, oldEntropy, oldBefore := now, entropy, beforeStamp
 	now = func() time.Time { return time.Date(2026, 10, 13, 6, 0, 0, 0, time.UTC) }
-	entropy = bytes.NewReader(bytes.Repeat([]byte{7}, 1000))
+	entropy = &countingReader{}
 	t.Cleanup(func() { now, entropy, beforeStamp = oldNow, oldEntropy, oldBefore })
+}
+
+// countingReader yields 0, 1, 2, ... so IDs stamped at the same instant
+// still differ, as they do with real randomness, and tests stay repeatable.
+type countingReader struct{ n byte }
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = r.n
+		r.n++
+	}
+	return len(p), nil
 }
 
 func writeRoot(t *testing.T, files map[string]string) string {

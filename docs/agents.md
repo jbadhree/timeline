@@ -22,6 +22,7 @@ Edit recorded events the same way: change the file, then check it.
 - **Record plans before their dates.** A `future` draft whose date has passed cannot be recorded.
 - **Keep links real.** A Markdown link into a type folder must point to an existing event file, relative to the file containing it.
 - **Do not delete or rewrite other writers' events** to make a check pass; report the problem instead.
+- **Never edit `history/`.** For a type with `history: true`, `tline check` saves a copy of every recorded version there. A change to a field or section listed in the type's `frozen`, or to any stamp, is rejected with the original value: keep the original, and record a new event, such as an outcome or a correction, instead of rewriting a frozen claim.
 - With the goals plugin: a goal needs `goal`, `owner`, `status`, and the sections `## Why`, `## How`, `## Done when`, and `## Why it will work`, and every `## How` item must link to a goal or task. A task needs `task`, `owner`, `status`, and `## How` with plain steps that link to no goal or task. A goal or task linked from a goal's How may omit `## Why`.
 
 ## Reading `tline check --json`
@@ -37,11 +38,12 @@ Edit recorded events the same way: change the file, then check it.
     { "path": "tasks/oops.md", "line": 6, "field": "onwer", "message": "is not a field of type \"task\"" },
     { "path": "tasks/oops.md", "section": "Why", "message": "is required because no goal links to this task from its How section" }
   ],
-  "stamped": []
+  "stamped": [],
+  "history": []
 }
 ```
 
-Each diagnostic names a file and, where known, a line and a `field` or `section`. `recorded` is true when at least one draft was stamped; `stamped` lists each with its new `id` and `entered_at`. A `conflict` field explains why stamping stopped early.
+Each diagnostic names a file and, where known, a line and a `field` or `section`. `recorded` is true when the check wrote anything; `stamped` lists each stamped draft with its new `id` and `entered_at`, and `history` lists each history copy saved, with its `version` and `reason`. A `conflict` field explains why writing stopped early.
 
 ## Exit codes
 
@@ -59,5 +61,6 @@ Each diagnostic names a file and, where known, a line and a `field` or `section`
 - `tline goal tree --json`, `tline goal list --json`, `tline goal show <name> --json`
 - `tline task list --json`, filtered with `--owner`, `--status`, or `--past-due`
 - `tline task show <name> --json`
+- `tline history <id|path|name> --json` lists an event's saved versions and what changed in each; add `--version N` to read one
 
 Name a goal or task by its `id`, its path, or its file name without `.md`.

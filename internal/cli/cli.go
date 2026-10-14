@@ -46,7 +46,8 @@ Flags:
   --help          print this help and exit
 
 Commands:
-  check           validate event files and stamp new drafts
+  check           validate event files, stamp new drafts, and save history
+  history         list or print the saved versions of an event
   help            print this help
 
 Run 'tline <command> --help' for a command's flags.
@@ -83,6 +84,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return writeOut(stdout, stderr, usage+pluginUsage())
 	case "check":
 		return runCheck(ctx, opts, rest[1:], stdout, stderr)
+	case "history":
+		return runHistory(ctx, opts, rest[1:], stdout, stderr)
 	}
 	cmds, err := pluginCommands()
 	if err != nil {

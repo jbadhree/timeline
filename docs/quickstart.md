@@ -231,3 +231,52 @@ types:
 - Goal and task types can take extra `fields` and `sections` too, and can be renamed: `objective: { from: goals/goal, folder: objectives }`.
 
 `tline` finds the timeline by looking for `timeline.yaml` in the current folder and its parents, or use `tline --root path/to/my-work ...`. If you keep the timeline in Git, add `.tline/` to `.gitignore`; it only holds the lock.
+
+## 8. Keep history, and freeze what must not change
+
+An event file is always its latest version. To keep earlier versions too, add `history: true` to a type. To make sure a claim cannot be rewritten after it is recorded, for example after the outcome of a prediction is known, list it in `frozen`:
+
+```yaml
+types:
+  prediction:
+    folder: predictions
+    entry_timing: future
+    history: true
+    frozen: [claim, timeline_at, "## Reasoning"]
+    fields:
+      claim: { type: string, required: true }
+      confidence: { type: number }
+```
+
+`frozen` takes field names and sections written as `"## Heading"`. `tline check` then saves an exact copy of every recorded version:
+
+```text
+$ tline check
+Checked 1 event (1 draft, 0 recorded): all valid. Stamped 1 draft:
+  predictions/launch.md  01M4VX7DG01B4M1KAYWRQBDYRP  future
+Entered at 2026-10-14T00:33:04Z.
+Saved 1 history copy:
+  predictions/launch.md  v1  recorded
+```
+
+Change the confidence and check again, and it saves v2. Change the claim, and the check fails and writes nothing:
+
+```text
+$ tline check
+predictions/launch.md:8: field "claim": is frozen; the first recorded version had "The first version ships by the end of the year"
+
+Checked 1 event (0 drafts, 1 recorded): 1 with problems, 1 problem. Nothing was written.
+```
+
+Stamps can never change for a type with history, frozen or not. To see the versions:
+
+```text
+$ tline history launch
+predictions/launch.md (prediction, id 01M4VX7DG01B4M1KAYWRQBDYRP)
+  v1  2026-10-14T00:33:04Z  recorded
+  v2  2026-10-14T00:33:04Z  changed: confidence
+```
+
+`tline history launch --version 1` prints a version exactly, and `--json` works too. Name the event by its ID, path, or file name; a removed event is still found by its ID.
+
+The copies live in `history/` next to `timeline.yaml`, as `history/predictions/<id>/v1.md`, `v2.md`, and a `versions.log`. Keep `history/` with your timeline, for example by committing it, and never edit it. A file with no changes gets no copy, moving a file keeps its history, and turning history on for a type with recorded events copies each of them as v1 at the next check.

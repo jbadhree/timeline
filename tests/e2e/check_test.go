@@ -270,7 +270,7 @@ func TestCheckStampsThenIsIdempotent(t *testing.T) {
 func TestCheckInvalidRootWritesNothing(t *testing.T) {
 	root := copyFixture(t, "invalid")
 	before := readTree(t, root)
-	if r := tline(t, root, "check"); r.code != 3 || !strings.Contains(r.stdout, "Nothing was stamped.") {
+	if r := tline(t, root, "check"); r.code != 3 || !strings.Contains(r.stdout, "Nothing was written.") {
 		t.Fatalf("got %+v", r)
 	}
 	after := readTree(t, root)

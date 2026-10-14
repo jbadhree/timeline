@@ -22,6 +22,9 @@ type CheckInput struct {
 	Now time.Time
 	// Plugins add rules after the core ones. See Plugin.
 	Plugins []Plugin
+	// History holds the first versions of history-type events, so changes to
+	// stamps and frozen fields can be rejected.
+	History History
 }
 
 // EventResult summarizes one checked event file.
@@ -87,6 +90,7 @@ func validate(in CheckInput) (*validator, CheckResult, error) {
 	}
 	v.checkDuplicateIDs()
 	v.checkLinks()
+	v.checkHistory()
 	if err := v.runPlugins(); err != nil {
 		return nil, CheckResult{}, err
 	}

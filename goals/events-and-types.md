@@ -69,6 +69,7 @@ types:
 - `sections` lists `##` headings the body must contain. It is optional.
 - `status` is optional. It lists a type's allowed `status` values and which are `closed`. A type with `status` requires a `status` field in every event. See [past due](two-times-and-timing.md#past-due).
 - `plugins` lists the plugins the timeline uses, and a type can be built from a plugin's template with `from: plugin/type`, such as `goal: { from: goals/goal, folder: goals }`; see [plugins](plugins.md#configuration). A type named like a used plugin's type, such as `goal`, is built from it even without `from`. A root enables each by declaring it, chooses its folder, and may add `fields` and `sections`; the built-in fields, sections, timing rule, and statuses cannot be removed or redefined.
+- `history: true` keeps a copy of every recorded version under `history/`, and `frozen` lists fields and `"## Heading"` sections that must not change from the first version; see [event history](event-history.md#design).
 - A type cannot redefine the shared fields below. Each folder belongs to one type.
 - Frontmatter fields that are neither shared nor declared are errors.
 

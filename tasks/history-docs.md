@@ -7,7 +7,7 @@ timeline_at: 2026-10-31T23:59:59Z
 created_by: claude
 task: Document history and add a frozen prediction to the markets example
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

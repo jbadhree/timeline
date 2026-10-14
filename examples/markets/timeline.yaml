@@ -13,6 +13,8 @@ types:
   prediction:
     folder: predictions
     entry_timing: future # entered before the expected event
+    history: true # keep every recorded version under history/predictions/
+    frozen: [pred, ticker, explanation, timeline_at] # the claim cannot change after it is recorded
     fields:
       pred: { type: string, required: true }
       ticker: { type: string, required: true }

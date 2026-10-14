@@ -22,6 +22,7 @@ Timeline gives agents, and the humans working with them, a sense of time. It rec
 - **Events are Markdown files.** Each event is a readable document with YAML metadata, written with any editor by humans or agents. Users define their own event types: news, predictions, observations, or anything else worth remembering. See [events and types](events-and-types.md).
 - **Every event has two times.** When it happened or is expected (event time), and when it entered the timeline (entry time). Each type has an entry timing rule: Past (learned after the fact), Future (entered in advance), or Real-time (entered as it happens). Future events can go past due. See [two times and timing rules](two-times-and-timing.md).
 - **Recording is explicit.** `tline check` validates files and stamps each new event with its ID, entry time, and timing rule. Until then the file is a draft. See [recording](record-events.md).
+- **History is plain copies too.** A type can keep every recorded version as a file under `history/`, and freeze fields and sections so a claim cannot be rewritten after it is recorded. See [event history](event-history.md).
 - **Plain files, nothing else.** Markdown and `timeline.yaml` are the only stored state; there is no database and no version control requirement. Every command reads the files directly. See [querying](query-the-timeline.md).
 - **Goals and tasks ship as a built-in plugin.** [Plugins](plugins.md) add types, rules, and commands on top of the core. A goal answers seven questions: what, why, by when, how, how we know it is done, why it will work, and who owns it. Every step in a goal's how is another goal or a task, so all work is tracked down to tasks: simpler steps whose result is obvious. See [goals and tasks](goals-and-tasks.md).
 
@@ -83,6 +84,7 @@ Recording and reading are the whole loop, and goals and tasks are views over the
 | --- | --- |
 | `tline check [paths...]` | Validate files and, if all pass, stamp new drafts with their ID, entry time, and timing rule |
 | `tline list` | List events with time and field filters, file paths, past-due flags, and drafts shown separately |
+| `tline history <event>` | List or print the saved versions of an event whose type keeps history |
 | `tline goal list`, `goal show`, `goal tree` | Goal views |
 | `tline task list`, `task show` | Task views |
 
@@ -100,7 +102,7 @@ Intended, not planned yet. Current decisions should not make them harder.
 - **Agent views:** "now" (recent, in progress, upcoming, past due), "as of a date" (only what had been entered by then), and a compact summary an agent can load as context.
 - **Learning data export:** predictions paired with what was known when they were made and with later outcome or assessment events.
 - **Link graph:** building and traversing the graph formed by all Markdown links.
-- **Record store and history:** a SQLite database that `tline check` writes alongside the files, recording every stamp and every version it sees. It would detect stamps typed or edited by hand, keep removed events and earlier versions, and power `tline history <id>`. It also makes reads fast for large timelines. Until it exists, entry times protect against honest mistakes only.
+- **Record store:** a database, local or hosted, that records every stamp and version across repos, imports the file history in `history/`, and detects stamps typed by hand before an event's first copy. It also makes reads fast for large timelines. Until it exists, entry times protect against honest mistakes only.
 - **Integrity:** stronger tamper evidence, such as signed records or external timestamps.
 - **A TUI** and other front ends built on the same core.
 

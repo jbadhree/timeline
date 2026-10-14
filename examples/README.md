@@ -9,7 +9,7 @@ Files are shown as they look after `tline check` has recorded them. In a draft, 
 [`markets/timeline.yaml`](markets/timeline.yaml) defines two types:
 
 - `news` uses the Past rule: the event happened before it was entered.
-- `prediction` uses the Future rule: it is entered before the expected event.
+- `prediction` uses the Future rule: it is entered before the expected event. It keeps history, so every recorded version is copied under [`markets/history/`](markets/history/), and its claim (`pred`, `ticker`, `explanation`, and `timeline_at`) is frozen: `tline check` rejects any change from the first recorded version. Try `tline --root examples/markets history 2026-10-01-nvda-all-time-high`.
 
 Day 1, 2026-10-01:
 

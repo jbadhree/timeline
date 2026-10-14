@@ -74,11 +74,16 @@ type TypeDef struct {
 	Base string
 	// Validators names further plugins whose rules apply to this type.
 	Validators []string
-	Timing     TimingRule
-	MaxDelay   time.Duration // only for RealTime
-	Fields     []FieldDef
-	Sections   []string // required ## headings
-	Status     *StatusDef
+	// History keeps a copy of every recorded version of the type's events.
+	History bool
+	// Frozen lists fields, by name, and sections, as "## Heading", that must
+	// keep their value from the first recorded version. It requires History.
+	Frozen   []string
+	Timing   TimingRule
+	MaxDelay time.Duration // only for RealTime
+	Fields   []FieldDef
+	Sections []string // required ## headings
+	Status   *StatusDef
 }
 
 // Field returns the named type-specific field definition.
@@ -142,6 +147,11 @@ var SharedFields = []string{FieldID, FieldType, FieldTimelineAt, FieldEnteredAt,
 
 // IsSharedField reports whether name is a shared field.
 func IsSharedField(name string) bool { return contains(SharedFields, name) }
+
+// IsStamp reports whether name is one of the fields tline check stamps.
+func IsStamp(name string) bool {
+	return name == FieldID || name == FieldEnteredAt || name == FieldEntryTiming
+}
 
 func contains(list []string, v string) bool {
 	for _, s := range list {

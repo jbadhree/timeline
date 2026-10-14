@@ -7,7 +7,7 @@ timeline_at: 2026-10-20T23:59:59Z
 created_by: claude
 task: Configure history and frozen fields per type
 owner: Badhree Babu
-status: open
+status: done
 ---
 
 ## How

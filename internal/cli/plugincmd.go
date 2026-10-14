@@ -16,7 +16,7 @@ import (
 )
 
 // coreCommands are handled by the CLI itself; plugins cannot take them.
-var coreCommands = map[string]bool{"check": true, "help": true}
+var coreCommands = map[string]bool{"check": true, "help": true, "history": true}
 
 // pluginCommand is a command and the plugin that registered it.
 type pluginCommand struct {

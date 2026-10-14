@@ -265,3 +265,44 @@ func TestValidators(t *testing.T) {
 		}
 	}
 }
+
+func TestHistoryAndFrozen(t *testing.T) {
+	cfg, err := Decode([]byte(`version: 1
+types:
+  prediction:
+    folder: predictions
+    entry_timing: future
+    history: true
+    frozen: [pred, timeline_at, "## Reasoning"]
+    fields: { pred: { type: string } }
+  goal: { folder: goals, history: true, frozen: [goal, owner, status] }
+`), plugins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := cfg.TypeByName("prediction")
+	g, _ := cfg.TypeByName("goal")
+	if !p.History || strings.Join(p.Frozen, "|") != "pred|timeline_at|## Reasoning" || !g.History || len(g.Frozen) != 3 {
+		t.Errorf("prediction %+v, goal %+v", p, g)
+	}
+
+	base := "version: 1\ntypes:\n  p:\n    folder: p\n    entry_timing: future\n    fields: { pred: { type: string } }\n"
+	for _, tc := range []struct{ extra, want string }{
+		{"    frozen: [pred]\n", "frozen requires history: true"},
+		{"    history: true\n    frozen: [nope]\n", `frozen "nope" is not a field of this type`},
+		{"    history: true\n    frozen: [entered_at]\n", "entered_at cannot be listed in frozen"},
+		{"    history: true\n    frozen: [\"## \"]\n", "needs a heading"},
+		{"    history: yes please\n", "history must be true or false"},
+	} {
+		_, err := Decode([]byte(base+tc.extra), plugins)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%q: error %v, want %q", tc.extra, err, tc.want)
+		}
+	}
+	for _, folder := range []string{"history", "history/notes"} {
+		_, err := Decode([]byte("version: 1\ntypes:\n  n: { folder: "+folder+", entry_timing: past }\n"), plugins)
+		if err == nil || !strings.Contains(err.Error(), "is reserved") {
+			t.Errorf("folder %s: %v", folder, err)
+		}
+	}
+}

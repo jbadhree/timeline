@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/jbadhree/timeline/core"
+	"github.com/jbadhree/timeline/internal/history"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -244,9 +245,9 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 	if !ok {
 		return core.TypeDef{}, false
 	}
-	allowed := []string{"folder", "entry_timing", "max_delay", "fields", "sections", "status", "validators"}
+	allowed := []string{"folder", "entry_timing", "max_delay", "fields", "sections", "status", "validators", "history", "frozen"}
 	if fromPlugin {
-		allowed = []string{"from", "folder", "fields", "sections", "validators"}
+		allowed = []string{"from", "folder", "fields", "sections", "validators", "history", "frozen"}
 	}
 	before := len(d.diags)
 	var (
@@ -259,6 +260,9 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 		sections   []string
 		status     *core.StatusDef
 		validators []string
+		history    bool
+		frozen     []string
+		frozenNode *yaml.Node
 	)
 	fieldsNode := (*yaml.Node)(nil)
 	for _, kv := range d.pairs(v, what, allowed...) {
@@ -293,6 +297,14 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 			status = d.decodeStatus(val, what)
 		case "validators":
 			validators = d.decodeValidators(val, what, template.Plugin)
+		case "history":
+			if val.Tag != "!!bool" {
+				d.errf(val, "%s: history must be true or false", what)
+			}
+			history = val.Value == "true"
+		case "frozen":
+			frozenNode = val
+			frozen, _ = d.strList(val, what+": frozen")
 		}
 	}
 	if !hasKey["folder"] {
@@ -321,18 +333,53 @@ func (d *decoder) decodeType(k, v *yaml.Node) (core.TypeDef, bool) {
 	if len(d.diags) > before {
 		return core.TypeDef{}, false
 	}
+	var t core.TypeDef
 	if fromPlugin {
-		t := template
+		t = template
 		t.Name, t.Base, t.Folder = name, template.Name, folder
 		t.Fields = append(append([]core.FieldDef{}, template.Fields...), fields...)
 		t.Sections = append(append([]string{}, template.Sections...), sections...)
 		t.Validators = validators
-		return t, true
+	} else {
+		t = core.TypeDef{
+			Name: name, Folder: folder, Timing: timing, MaxDelay: maxDelay,
+			Fields: fields, Sections: sections, Status: status, Validators: validators,
+		}
 	}
-	return core.TypeDef{
-		Name: name, Folder: folder, Timing: timing, MaxDelay: maxDelay,
-		Fields: fields, Sections: sections, Status: status, Validators: validators,
-	}, true
+	t.History, t.Frozen = history, frozen
+	if frozenNode != nil {
+		d.checkFrozen(frozenNode, what, &t)
+	}
+	if len(d.diags) > before {
+		return core.TypeDef{}, false
+	}
+	return t, true
+}
+
+// checkFrozen checks a type's frozen list: it needs history, and each entry
+// is one of the type's fields, a shared field other than the stamps, or a
+// "## Heading" section.
+func (d *decoder) checkFrozen(n *yaml.Node, what string, t *core.TypeDef) {
+	if !t.History {
+		d.errf(n, "%s: frozen requires history: true", what)
+		return
+	}
+	for _, name := range t.Frozen {
+		if heading, ok := strings.CutPrefix(name, "## "); ok {
+			if strings.TrimSpace(heading) == "" {
+				d.errf(n, "%s: frozen section %q needs a heading", what, name)
+			}
+			continue
+		}
+		_, declared := t.Field(name)
+		switch {
+		case core.IsStamp(name):
+			d.errf(n, "%s: %s cannot be listed in frozen; history types already reject changes to stamps", what, name)
+		case declared, core.IsSharedField(name), name == core.FieldStatus && t.Status != nil:
+		default:
+			d.errf(n, "%s: frozen %q is not a field of this type; write sections as \"## Heading\"", what, name)
+		}
+	}
 }
 
 // decodePlugins reads the "plugins" list, or enables every available plugin
@@ -454,7 +501,7 @@ func (d *decoder) cleanFolder(n *yaml.Node, s, what string) string {
 		d.errf(n, "%s: folder must be a subfolder of the root", what)
 		return ""
 	}
-	if c == ".tline" || strings.HasPrefix(c, ".tline/") || c == ".git" || strings.HasPrefix(c, ".git/") {
+	if c == ".tline" || strings.HasPrefix(c, ".tline/") || c == ".git" || strings.HasPrefix(c, ".git/") || c == history.Folder || strings.HasPrefix(c, history.Folder+"/") {
 		d.errf(n, "%s: folder %q is reserved", what, c)
 		return ""
 	}

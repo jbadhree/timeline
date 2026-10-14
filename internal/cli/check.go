@@ -16,6 +16,7 @@ import (
 	"github.com/jbadhree/timeline/core"
 	"github.com/jbadhree/timeline/internal/config"
 	"github.com/jbadhree/timeline/internal/document"
+	"github.com/jbadhree/timeline/internal/history"
 	"github.com/jbadhree/timeline/internal/lock"
 	"github.com/jbadhree/timeline/internal/plugins/goals"
 )
@@ -60,11 +61,13 @@ type stampResult struct {
 type checkOutput struct {
 	Root        string             `json:"root"`
 	DryRun      bool               `json:"dry_run"`
-	Recorded    bool               `json:"recorded"` // true when at least one draft was stamped
+	Recorded    bool               `json:"recorded"` // true when the check stamped a draft or saved a history copy
 	Valid       bool               `json:"valid"`
 	Events      []core.EventResult `json:"events"`
 	Diagnostics []core.Diagnostic  `json:"diagnostics"`
 	Stamped     []stampResult      `json:"stamped"`
+	// History lists the history copies this check saved.
+	History []historyResult `json:"history"`
 	// Conflict explains why stamping stopped early, if it did.
 	Conflict string `json:"conflict,omitempty"`
 }
@@ -107,7 +110,7 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		return ExitFailure
 	}
 
-	out := checkOutput{Root: root, DryRun: *dryRun, Events: []core.EventResult{}, Diagnostics: []core.Diagnostic{}, Stamped: []stampResult{}}
+	out := checkOutput{Root: root, DryRun: *dryRun, Events: []core.EventResult{}, Diagnostics: []core.Diagnostic{}, Stamped: []stampResult{}, History: []historyResult{}}
 
 	if !*dryRun {
 		wait := lockWait
@@ -155,7 +158,19 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		return usageError(stderr, "check: "+err.Error())
 	}
 
-	in := core.CheckInput{Config: cfg, Docs: docs, Selected: selected, Now: clock(), Plugins: enabledPlugins(cfg)}
+	store := history.Store{Root: root}
+	hist, err := loadHistory(store, cfg)
+	if err != nil {
+		diagnose(stderr, "reading history: %v", err)
+		return ExitFailure
+	}
+	started, err := startedHistory(store, cfg)
+	if err != nil {
+		diagnose(stderr, "reading history: %v", err)
+		return ExitFailure
+	}
+
+	in := core.CheckInput{Config: cfg, Docs: docs, Selected: selected, Now: clock(), Plugins: enabledPlugins(cfg), History: hist}
 	res, err := core.Check(in)
 	if err == nil && !*dryRun && res.Valid() {
 		// The entry time is read after validation, immediately before
@@ -177,7 +192,7 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 		if !e.Draft {
 			continue
 		}
-		stamped, conflict, err := stampDraft(root, cfg, snap, e, in.Now)
+		stamped, data, conflict, err := stampDraft(root, cfg, snap, e, in.Now)
 		if err != nil {
 			diagnose(stderr, "stamping %s: %v", e.Path, err)
 			renderCheck(stdout, stderr, opts.JSON, out, "")
@@ -188,8 +203,29 @@ func runCheck(ctx context.Context, opts Options, args []string, stdout, stderr i
 			break
 		}
 		out.Stamped = append(out.Stamped, stamped)
+		// Save v1 before going on, so a stopped check loses as little as
+		// possible; a missing copy is saved by the next check.
+		if t, _ := cfg.TypeByName(e.Type); t.History {
+			n, err := store.Save(t.Folder, stamped.ID, data, in.Now, history.Recorded, e.Path)
+			if err != nil {
+				diagnose(stderr, "saving history for %s: %v", e.Path, err)
+				renderCheck(stdout, stderr, opts.JSON, out, "")
+				return ExitFailure
+			}
+			out.History = append(out.History, historyResult{Path: e.Path, ID: stamped.ID, Version: n, Reason: history.Recorded})
+		}
 	}
-	out.Recorded = len(out.Stamped) > 0
+	if out.Conflict == "" {
+		saved, conflict, err := saveRecordedHistory(root, cfg, store, snap, started, res.Events, in.Now)
+		out.History = append(out.History, saved...)
+		out.Conflict = conflict
+		if err != nil {
+			diagnose(stderr, "saving history: %v", err)
+			renderCheck(stdout, stderr, opts.JSON, out, "")
+			return ExitFailure
+		}
+	}
+	out.Recorded = len(out.Stamped) > 0 || len(out.History) > 0
 	return renderCheck(stdout, stderr, opts.JSON, out, "")
 }
 
@@ -218,35 +254,36 @@ func builtinPlugins() []core.Plugin { return []core.Plugin{goals.New()} }
 // clock returns the current time at Timeline's whole-second precision.
 func clock() time.Time { return now().UTC().Truncate(time.Second) }
 
-// stampDraft writes the stamps into one validated draft. A non-empty conflict
-// means the file changed after validation and was left alone.
-func stampDraft(root string, cfg *core.Config, snap document.Snapshot, e core.EventResult, at time.Time) (stampResult, string, error) {
+// stampDraft writes the stamps into one validated draft and returns the
+// stamped content. A non-empty conflict means the file changed after
+// validation and was left alone.
+func stampDraft(root string, cfg *core.Config, snap document.Snapshot, e core.EventResult, at time.Time) (stampResult, []byte, string, error) {
 	t, ok := cfg.TypeByName(e.Type)
 	if !ok {
-		return stampResult{}, "", fmt.Errorf("unknown type %q", e.Type)
+		return stampResult{}, nil, "", fmt.Errorf("unknown type %q", e.Type)
 	}
 	id, err := core.NewULID(at, entropy)
 	if err != nil {
-		return stampResult{}, "", err
+		return stampResult{}, nil, "", err
 	}
 	path := filepath.Join(root, filepath.FromSlash(e.Path))
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return stampResult{}, "", err
+		return stampResult{}, nil, "", err
 	}
 	stamp := document.Stamp{ID: id, EnteredAt: at, EntryTiming: t.Timing}
 	updated, err := document.InsertStamp(data, stamp)
 	if err != nil {
-		return stampResult{}, "", err
+		return stampResult{}, nil, "", err
 	}
 	beforeStamp(e.Path)
 	if err := document.Rewrite(path, snap[e.Path], updated); err != nil {
 		if errors.Is(err, document.ErrChanged) {
-			return stampResult{}, fmt.Sprintf("%s changed after it was validated; it was not stamped. Run tline check again.", e.Path), nil
+			return stampResult{}, nil, fmt.Sprintf("%s changed after it was validated; it was not stamped. Run tline check again.", e.Path), nil
 		}
-		return stampResult{}, "", err
+		return stampResult{}, nil, "", err
 	}
-	return stampResult{Path: e.Path, ID: id, EnteredAt: at.Format(time.RFC3339), EntryTiming: t.Timing}, "", nil
+	return stampResult{Path: e.Path, ID: id, EnteredAt: at.Format(time.RFC3339), EntryTiming: t.Timing}, updated, "", nil
 }
 
 // selectPaths turns path arguments (relative to cwd) into the root-relative
@@ -345,7 +382,7 @@ func renderCheck(stdout, stderr io.Writer, asJSON bool, out checkOutput, failure
 		case out.DryRun:
 			b.WriteString(" Nothing was written.\n")
 		case len(out.Diagnostics) > 0:
-			b.WriteString(" Nothing was stamped.\n")
+			b.WriteString(" Nothing was written.\n")
 		case len(out.Stamped) == 0 && out.Conflict == "":
 			b.WriteString(" No drafts to stamp.\n")
 		default:
@@ -355,6 +392,12 @@ func renderCheck(stdout, stderr io.Writer, asJSON bool, out checkOutput, failure
 			}
 			if len(out.Stamped) > 0 {
 				fmt.Fprintf(&b, "Entered at %s.\n", out.Stamped[0].EnteredAt)
+			}
+		}
+		if len(out.History) > 0 {
+			fmt.Fprintf(&b, "Saved %d history %s:\n", len(out.History), plural(len(out.History), "copy", "copies"))
+			for _, h := range out.History {
+				fmt.Fprintf(&b, "  %s  v%d  %s\n", h.Path, h.Version, h.Reason)
 			}
 		}
 		if out.Conflict != "" {
