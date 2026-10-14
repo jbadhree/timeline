@@ -52,6 +52,7 @@ Decided in [plan with goals](../decisions/plan-with-goals.md).
 - [Two times and timing rules](two-times-and-timing.md)
 - [Record events with `tline check`](record-events.md)
 - [Query the timeline](query-the-timeline.md)
+- [Event history](event-history.md)
 - [Plugins](plugins.md)
 - [Goals and tasks](goals-and-tasks.md)
 - [Write a quickstart for people and an instruction page for agents](../tasks/user-and-agent-guides.md)

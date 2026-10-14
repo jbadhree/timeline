@@ -12,5 +12,5 @@ status: open
 
 ## How
 
-- Keep every version of every event in the hosted store and serve `tline history <id>`.
+- Import the per-type file history (`history/`) into the hosted store and keep every version across repos.
 - Report stamps that differ from what the store recorded.
