@@ -7,7 +7,7 @@ timeline_at: 2026-10-13T18:40:00Z
 created_by: claude
 decision: Whether and when to support external plugins written in any language
 decided_by: Badhree Babu
-status: open
+status: current
 ---
 
 ## Context
@@ -22,6 +22,10 @@ Plugins are Go packages compiled into `tline`, such as the goals plugin. A team 
 
 The planned work is described in [the deferred task](../tasks/external-plugin-protocol.md).
 
+## Decision
+
+Decided on 2026-10-14: support external plugins as programs speaking a versioned JSON protocol, covering validators, type templates, and commands on the same protocol. tline starts the program once per request, writes one JSON request to its stdin, and reads one JSON response from its stdout. External plugins run only after the timeline's user approves them; see [approve external plugins per timeline](plugin-approval.md). WebAssembly plugins stay a later option.
+
 ## Consequences
 
-Until this is decided, only built-in plugins exist, and `timeline.yaml` rejects external plugin entries with a clear message. The plugin interface in the core is already the shape external validators would use, so deciding later costs nothing now.
+External plugins implement the same core plugin interface as built-in ones and get the same guarantees: they see only facts, report only on their own types, never loosen a core rule, and never write event files. Each request starts a process, so plugins suit validation and occasional commands, not per-event calls. The protocol is documented in `docs/plugins.md` and must stay backward compatible: new fields may be added, existing ones keep their meaning.

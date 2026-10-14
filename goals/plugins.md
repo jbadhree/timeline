@@ -7,12 +7,12 @@ timeline_at: 2026-12-05T23:59:59Z
 created_by: claude
 goal: Let plugins define types, validation rules, and commands, and ship goals and tasks as the first one
 owner: Badhree Babu
-status: achieved
+status: open
 ---
 
 ## Why
 
-Every domain gives its events and links its own meaning: goals have children, decisions supersede each other, incidents have follow-ups. Timeline should hold the facts that are true everywhere and let plugins add meaning, so new kinds of events need no change to Timeline. Decided in [link meanings belong to plugins](../decisions/relations-in-plugins.md) and [goal and task ship as a built-in plugin](../decisions/goals-and-tasks-as-plugin.md).
+Every domain gives its events and links its own meaning: goals have children, decisions supersede each other, incidents have follow-ups. Timeline should hold the facts that are true everywhere and let plugins add meaning, so new kinds of events need no change to Timeline. Decided in [link meanings belong to plugins](../decisions/relations-in-plugins.md), [goal and task ship as a built-in plugin](../decisions/goals-and-tasks-as-plugin.md), [external plugins over JSON](../decisions/external-plugins.md), and [approve external plugins per timeline](../decisions/plugin-approval.md).
 
 ## How
 
@@ -20,12 +20,19 @@ Every domain gives its events and links its own meaning: goals have children, de
 - [Move goal and task rules into a built-in goals plugin](../tasks/goals-plugin.md)
 - [Enable plugins and their types in timeline.yaml](../tasks/plugin-config.md)
 - [Let plugins register commands](../tasks/plugin-commands.md)
+- [Run external plugins over a JSON protocol](../tasks/external-plugin-protocol.md)
+- [Configure external plugins in timeline.yaml](../tasks/external-plugin-config.md)
+- [Approve external plugins per timeline](../tasks/plugin-trust.md)
+- [Add example external plugins in Python and Go](../tasks/plugin-examples.md)
+- [Write the plugin guide and protocol reference](../tasks/plugin-guide.md)
 
 ## Done when
 
 - `core/` contains no goal- or task-specific code: no children, cycles, inherited why, or linked-step rules.
 - Every existing goal and task test passes against the goals plugin, and this repository's goals and tasks check exactly as before.
 - `tline goal` and `tline task` exist only because the goals plugin registers them.
+- An external plugin in any language can provide a type, validation rules, and a command, and its failures name it and exit 1.
+- External plugins run only after the timeline's user approves them, and changed settings or programs need approval again.
 
 ## Why it will work
 
@@ -75,6 +82,22 @@ types:
 - `plugins` lists the plugins a timeline uses; only those run, and a listed plugin that `tline` does not have is an error. Without the list, every built-in plugin is used, so older roots keep working. A plugin that is not listed leaves its type names free for ordinary configured types, and its commands refuse to run in that timeline.
 - `from: plugin/type` builds a type from a plugin's template. The type may have any name, and several types may share one template; the plugin's rules follow the template (`TypeDef.Base`), not the name. Without `from`, a type named like a type of a used plugin is built from it, as in `goal: { folder: goals }`; if two used plugins provide that name, `from` must choose.
 - `validators` adds the rules of other used plugins to a type; those plugins then receive its events.
-- External plugins, written as `- name: { run: ./path }`, are rejected: whether and when to support them is an [open decision](../decisions/external-plugins.md).
+- External plugins are written as `- name: { run: ./tools/plugin, timeout: 10s }`; see below.
 
 A plugin depending on another plugin's types reads only that plugin's facts, never its meaning. Versioned plugin names and the protocol version keep this stable. WebAssembly plugins are a possible later option if untrusted plugins ever matter.
+
+### External plugins
+
+An external plugin is a program, in any language, outside the `tline` binary. `run` is a path relative to the root, or a program name found on `PATH`; `timeout` defaults to 10s. Its name follows the same rules as built-in plugins, and a clash with a built-in plugin, a core command, or another plugin's command or type is a configuration error.
+
+`tline` starts the program once per request, in the root, writes one JSON request to its stdin, reads one JSON response from its stdout, and passes its stderr through. Requests carry `"protocol": 1` and one of:
+
+- `describe`, at most once per `tline` run, before `from:` types are built or help is shown: the plugin's name, supported protocol versions, type templates in the shape of a `timeline.yaml` type, whether it validates, and its commands.
+- `validate`: the same facts as `core.PluginInput`, in JSON; returns diagnostics. It runs on dry runs too.
+- `command`: the facts, the arguments, the JSON flag, and the diagnostics in the plugin's events; returns text, JSON, an incomplete flag, or a usage error.
+
+The external adapter implements the same core interfaces as built-in plugins, so the same guarantees hold: diagnostics only for its own types, no loosened core rule, no file writes. A missing program, non-zero exit, timeout, invalid JSON, or unsupported protocol version exits 1 and names the plugin; a command's usage error exits 2 and an incomplete result exits 5. The full protocol reference is in `docs/plugins.md`.
+
+### Approval
+
+A timeline's external plugins run only after its user approves them with `tline plugins trust`, which records the root's path and a fingerprint of the plugin settings and of any plugin program inside the root, in the user's configuration directory (`$TLINE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/tline`, else `~/.config/tline`). Without approval, or after the fingerprint changes, commands that need the plugins exit 6 and say how to review and approve them. `tline plugins` shows each plugin and whether it is approved; `tline plugins untrust` removes the approval. Approval asks for confirmation in a terminal and requires `--yes` otherwise. `TLINE_TRUST_PLUGINS=1` skips approval, for CI.
