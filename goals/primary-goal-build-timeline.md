@@ -59,6 +59,7 @@ Decided in [plan with goals](../decisions/plan-with-goals.md).
 - [Write a quickstart for people and an instruction page for agents](../tasks/user-and-agent-guides.md)
 - [Build release executables](../tasks/build-release-executables.md)
 - [Review the code written so far](review-the-code.md)
+- [Keep test and tooling debt visible](test-debt.md)
 - [Run the first-release demo](../tasks/run-first-release-demo.md)
 
 ## Done when
