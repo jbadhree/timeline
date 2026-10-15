@@ -175,13 +175,38 @@ func TestRecordedMetadata(t *testing.T) {
 	wantProblems(t, check(t, news(id)), "news/n.md", "missing entered_at, entry_timing")
 	wantProblems(t, check(t, news(id, stamp("entered_at", "2026-10-01T14:00:00+00:00"), str("entry_timing", "past"))),
 		"news/n.md", "UTC with a Z suffix")
-	wantProblems(t, check(t, news(id, stamp("entered_at", "2026-10-01T14:00:00Z"), str("entry_timing", "future"))),
-		"news/n.md", `type "news" uses "past"`)
+	wantProblems(t, check(t, news(id, stamp("entered_at", "2026-10-01T14:00:00Z"), str("entry_timing", "sometime"))),
+		"news/n.md", "must be past, future, or real_time")
 	// Timing is judged against the recorded entry time, not now.
 	wantProblems(t, check(t, news(id, stamp("entered_at", "2026-10-01T12:00:00Z"), str("entry_timing", "past"))),
 		"news/n.md", "must happen before it is entered")
 	wantProblems(t, check(t, news(str("id", "not-a-ulid"), stamp("entered_at", "2026-10-01T14:00:00Z"), str("entry_timing", "past"))),
 		"news/n.md", "26-character ULID")
+}
+
+// A recorded event keeps the timing rule it was entered under when its type's
+// rule changes later; only new drafts use the type's current rule.
+func TestRecordedEventKeepsItsEntryTiming(t *testing.T) {
+	id := str("id", "01M3VW7KR0FFWVGBE1D5GYN31R")
+	news := func(eventTime, enteredAt, timing string) Document {
+		return Document{Path: "news/n.md", Fields: []Field{
+			id, stamp("entered_at", enteredAt), str("entry_timing", timing),
+			str("type", "news"), stamp("timeline_at", eventTime), str("created_by", "a"), str("ticker", "X"),
+		}}
+	}
+	// news is a past type now, but this event was entered as a future one.
+	wantProblems(t, check(t, news("2026-10-05T00:00:00Z", "2026-10-01T14:00:00Z", "future")), "")
+	wantProblems(t, check(t, news("2026-09-01T00:00:00Z", "2026-10-01T14:00:00Z", "future")),
+		"news/n.md", "a future event must be entered before it happens")
+	// Entered as real_time when news had a max_delay; the delay is no longer
+	// defined, so only "not entered before it happened" still applies.
+	wantProblems(t, check(t, news("2026-09-01T00:00:00Z", "2026-10-01T14:00:00Z", "real_time")), "")
+	wantProblems(t, check(t, news("2026-10-02T00:00:00Z", "2026-10-01T14:00:00Z", "real_time")),
+		"news/n.md", "cannot be entered before it happens")
+	// A draft is judged by the type's current rule.
+	draft := news("2026-11-01T00:00:00Z", "", "")
+	draft.Fields = draft.Fields[3:]
+	wantProblems(t, check(t, draft), "news/n.md", "a past event must happen before it is entered")
 }
 
 func TestDuplicateIDs(t *testing.T) {

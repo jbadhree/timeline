@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,6 +135,95 @@ func TestScan(t *testing.T) {
 	}
 }
 
+func TestHeadingsAndFences(t *testing.T) {
+	src := "---\ntype: goal\n---\n" +
+		"## C#\n## Closed ##\n" +
+		"````\n```\n## Inside a four-backtick fence\n````\n" +
+		"## After\n" +
+		"```go\n```go\n## Inside, after a line that cannot close the fence\n```\n" +
+		"~~~\n```\n## Inside a tilde fence\n~~~~\n" +
+		"## Last\n"
+	d := Parse("goals/g.md", []byte(src))
+	var got []string
+	for _, s := range d.Sections {
+		got = append(got, s.Heading)
+	}
+	want := []string{"C#", "Closed", "After", "Last"}
+	if len(got) != len(want) {
+		t.Fatalf("headings = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("headings = %q, want %q", got, want)
+			break
+		}
+	}
+}
+
+func TestByteOrderMark(t *testing.T) {
+	d := Parse("goals/g.md", []byte("\ufeff---\ntype: goal\n---\n\n## Why\n\nBecause.\n"))
+	if d.ParseErr != nil {
+		t.Fatalf("a byte order mark should be ignored: %v", d.ParseErr)
+	}
+	if f, ok := d.Field("type"); !ok || f.Value.Text != "goal" || f.Line != 2 {
+		t.Errorf("type = %+v", f)
+	}
+	if s, ok := d.Section("Why"); !ok || s.Line != 5 {
+		t.Errorf("Why = %+v", s)
+	}
+}
+
+func TestScanRejectsLinks(t *testing.T) {
+	root := t.TempDir()
+	elsewhere := t.TempDir()
+	write := func(p, content string) {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := func(target, p string) {
+		if err := os.Symlink(target, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := &core.Config{Types: []core.TypeDef{{Name: "goal", Folder: "goals"}}}
+	write(filepath.Join(elsewhere, "a.md"), "---\ntype: goal\n---\n")
+	write(filepath.Join(root, "goals", "real.md"), "---\ntype: goal\n---\n")
+
+	// Links inside a type folder, to a file or a folder, are reported, not read.
+	link(filepath.Join(elsewhere, "a.md"), filepath.Join(root, "goals", "file.md"))
+	link(elsewhere, filepath.Join(root, "goals", "folder"))
+	docs, snap, err := Scan(context.Background(), root, cfg)
+	if err != nil || len(docs) != 3 || len(snap) != 1 {
+		t.Fatalf("docs = %+v, snap = %v, err = %v", docs, snap, err)
+	}
+	for _, d := range docs {
+		linked := d.Path != "goals/real.md"
+		if got := d.ParseErr != nil && strings.Contains(d.ParseErr.Message, "symbolic link"); got != linked {
+			t.Errorf("%s: ParseErr = %v", d.Path, d.ParseErr)
+		}
+	}
+
+	// A type folder that is a link, or a file, is an error, not an empty folder.
+	if err := os.RemoveAll(filepath.Join(root, "goals")); err != nil {
+		t.Fatal(err)
+	}
+	link(elsewhere, filepath.Join(root, "goals"))
+	if _, _, err := Scan(context.Background(), root, cfg); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Errorf("want a symbolic link error, got %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, "goals")); err != nil {
+		t.Fatal(err)
+	}
+	write(filepath.Join(root, "goals"), "not a folder")
+	if _, _, err := Scan(context.Background(), root, cfg); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Errorf("want a not-a-directory error, got %v", err)
+	}
+}
+
 func TestLinkForms(t *testing.T) {
 	for text, want := range map[string]string{
 		`[a](plain.md)`:                    "plain.md",
@@ -165,6 +255,10 @@ func TestInsertStamp(t *testing.T) {
 		"lf": {
 			"---\ntype: task\n---\n\nBody stays   exactly.\n",
 			"---\nid: 01M3VW7KR0FFWVGBE1D5GYN31R\nentered_at: 2026-10-13T06:00:00Z\nentry_timing: future\ntype: task\n---\n\nBody stays   exactly.\n",
+		},
+		"byte order mark kept": {
+			"\ufeff---\ntype: task\n---\n",
+			"\ufeff---\nid: 01M3VW7KR0FFWVGBE1D5GYN31R\nentered_at: 2026-10-13T06:00:00Z\nentry_timing: future\ntype: task\n---\n",
 		},
 		"crlf": {
 			"---\r\ntype: task\r\n---\r\n",

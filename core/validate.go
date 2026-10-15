@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"path"
 	"sort"
@@ -157,7 +158,7 @@ func (v *validator) checkEvent(e *event) {
 	eventTime, eventTimeOK := v.timeField(p, d, FieldTimelineAt, true)
 	v.typedField(p, d, FieldDef{Name: FieldCreatedBy, Kind: KindString, Required: true, NonEmpty: true})
 
-	enteredAt, recorded := v.recordedMetadata(e)
+	enteredAt, recordedRule, recorded := v.recordedMetadata(e)
 
 	// Type-specific fields, status, and unknown fields.
 	for _, fd := range e.typ.Fields {
@@ -179,15 +180,21 @@ func (v *validator) checkEvent(e *event) {
 		v.add(Diagnostic{Path: p, Line: f.Line, Field: f.Name, Message: fmt.Sprintf("is not a field of type %q", e.typ.Name)})
 	}
 
-	// Timing: a draft is checked against the time it would be recorded now; a
-	// recorded event against its own entry time.
+	// Timing: a draft is checked against the time it would be recorded now,
+	// under its type's rule; a recorded event against its own entry time,
+	// under the rule it was entered under.
 	if eventTimeOK {
-		entry := v.in.Now
+		entry, rule, maxDelay := v.in.Now, e.typ.Timing, e.typ.MaxDelay
 		if recorded {
-			entry = enteredAt // zero if entered_at was missing or invalid, already reported
+			entry, rule = enteredAt, recordedRule // zero if missing or invalid, already reported
+			if rule == RealTime && e.typ.Timing != RealTime {
+				// The type no longer says how late a real-time entry may
+				// be; keep only the rule that it was not entered early.
+				maxDelay = math.MaxInt64
+			}
 		}
-		if !entry.IsZero() {
-			if err := CheckTiming(e.typ.Timing, eventTime, entry, e.typ.MaxDelay); err != nil {
+		if !entry.IsZero() && rule != "" {
+			if err := CheckTiming(rule, eventTime, entry, maxDelay); err != nil {
 				f, _ := d.Field(FieldTimelineAt)
 				msg := err.Error()
 				if !recorded {
@@ -208,15 +215,17 @@ func (v *validator) checkEvent(e *event) {
 
 // recordedMetadata checks id, entered_at, and entry_timing. They are written
 // together by tline check, so a file has all three or none. It returns the
-// entry time and whether the file claims to be recorded.
-func (v *validator) recordedMetadata(e *event) (time.Time, bool) {
+// entry time, the timing rule the event was entered under, and whether the
+// file claims to be recorded. The recorded rule is authoritative: it may
+// differ from the type's current rule, which only applies to new drafts.
+func (v *validator) recordedMetadata(e *event) (time.Time, TimingRule, bool) {
 	d, p := e.doc, e.doc.Path
 	idF, hasID := d.Field(FieldID)
 	atF, hasAt := d.Field(FieldEnteredAt)
 	tmF, hasTm := d.Field(FieldEntryTiming)
 	if !hasID && !hasAt && !hasTm {
 		e.draft = true
-		return time.Time{}, false
+		return time.Time{}, "", false
 	}
 	if !hasID || !hasAt || !hasTm {
 		var missing []string
@@ -251,16 +260,16 @@ func (v *validator) recordedMetadata(e *event) (time.Time, bool) {
 			at = t
 		}
 	}
+	var rule TimingRule
 	if hasTm {
 		r := TimingRule(tmF.Value.Text)
-		switch {
-		case tmF.Value.Kind != ValueString || !r.Valid():
+		if tmF.Value.Kind != ValueString || !r.Valid() {
 			v.add(Diagnostic{Path: p, Line: tmF.Line, Field: FieldEntryTiming, Message: "must be past, future, or real_time"})
-		case r != e.typ.Timing:
-			v.add(Diagnostic{Path: p, Line: tmF.Line, Field: FieldEntryTiming, Message: fmt.Sprintf("is %q, but type %q uses %q", r, e.typ.Name, e.typ.Timing)})
+		} else {
+			rule = r
 		}
 	}
-	return at, true
+	return at, rule, true
 }
 
 func (v *validator) timeField(p string, d *Document, name string, required bool) (time.Time, bool) {

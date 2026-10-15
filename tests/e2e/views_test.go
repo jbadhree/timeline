@@ -318,3 +318,27 @@ tasks/oops.md:7: field "status": is "someday"; allowed values are open, done, dr
 		t.Errorf("broken task:\n%s", r.stdout)
 	}
 }
+
+func TestViewsReportChangedFrozenFields(t *testing.T) {
+	root := writeFiles(t, map[string]string{
+		"timeline.yaml": "version: 1\ntypes:\n  task: { folder: tasks, history: true, frozen: [task] }\n",
+		"tasks/t.md":    "---\ntype: task\ntimeline_at: 2099-01-01T00:00:00Z\ncreated_by: e2e\ntask: Original\nowner: Ada\nstatus: open\n---\n\n## Why\n\nBecause.\n\n## How\n\n- Do it.\n",
+	})
+	if r := tline(t, root, "check"); r.code != 0 {
+		t.Fatalf("recording: %+v", r)
+	}
+	p := filepath.Join(root, "tasks", "t.md")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(strings.Replace(string(data), "task: Original", "task: Rewritten", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := tline(t, root, "check", "--dry-run"); r.code != 3 {
+		t.Fatalf("check should reject the frozen change: %+v", r)
+	}
+	if r := tline(t, root, "task", "list"); r.code != 5 || !strings.Contains(r.stderr, "incomplete") {
+		t.Errorf("task list should be incomplete: %+v", r)
+	}
+}

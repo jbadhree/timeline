@@ -3,6 +3,7 @@ package external
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -280,6 +281,11 @@ func decodeTemplate(tj templateJSON) (core.TypeDef, error) {
 	if tj.Status != nil {
 		if len(tj.Status.Values) == 0 {
 			return t, fmt.Errorf("type %q: status needs values", tj.Name)
+		}
+		for _, c := range tj.Status.Closed {
+			if !slices.Contains(tj.Status.Values, c) {
+				return t, fmt.Errorf("type %q: closed status %q is not one of the status values", tj.Name, c)
+			}
 		}
 		t.Status = &core.StatusDef{Values: tj.Status.Values, Closed: tj.Status.Closed}
 	}

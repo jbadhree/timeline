@@ -32,18 +32,29 @@ import (
 type Snapshot map[string][sha256.Size]byte
 
 // Scan reads every Markdown file under the configured type folders of root.
-// A missing folder is treated as empty. Hidden files and directories are
-// skipped. Results are sorted by path.
+// A missing folder is treated as empty; a folder that is a symbolic link or
+// not a directory is an error. Symbolic links inside a folder are never
+// followed: each is returned as a document that failed to parse, so the check
+// reports it. Hidden files and directories are skipped. Results are sorted by
+// path.
 func Scan(ctx context.Context, root string, cfg *core.Config) ([]core.Document, Snapshot, error) {
 	var docs []core.Document
 	snap := Snapshot{}
 	for _, t := range cfg.Types {
 		dir := filepath.Join(root, filepath.FromSlash(t.Folder))
-		err := filepath.WalkDir(dir, func(p string, entry fs.DirEntry, err error) error {
+		info, err := os.Lstat(dir)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			continue
+		case err != nil:
+			return nil, nil, fmt.Errorf("scanning %s: %w", t.Folder, err)
+		case info.Mode()&fs.ModeSymlink != 0:
+			return nil, nil, fmt.Errorf("type folder %s is a symbolic link; Timeline does not follow links, so keep the folder itself in the root", t.Folder)
+		case !info.IsDir():
+			return nil, nil, fmt.Errorf("type folder %s is not a directory", t.Folder)
+		}
+		err = filepath.WalkDir(dir, func(p string, entry fs.DirEntry, err error) error {
 			if err != nil {
-				if p == dir && os.IsNotExist(err) {
-					return filepath.SkipDir
-				}
 				return err
 			}
 			if ctxErr := ctx.Err(); ctxErr != nil {
@@ -55,6 +66,16 @@ func Scan(ctx context.Context, root string, cfg *core.Config) ([]core.Document, 
 				}
 				return nil
 			}
+			rel, err := filepath.Rel(root, p)
+			if err != nil {
+				return err
+			}
+			rel = filepath.ToSlash(rel)
+			if entry.Type()&fs.ModeSymlink != 0 {
+				docs = append(docs, core.Document{Path: rel, ParseErr: &core.Diagnostic{Path: rel,
+					Message: "is a symbolic link; Timeline does not follow links, so keep event files and folders themselves in the type folder"}})
+				return nil
+			}
 			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 				return nil
 			}
@@ -62,11 +83,6 @@ func Scan(ctx context.Context, root string, cfg *core.Config) ([]core.Document, 
 			if err != nil {
 				return err
 			}
-			rel, err := filepath.Rel(root, p)
-			if err != nil {
-				return err
-			}
-			rel = filepath.ToSlash(rel)
 			docs = append(docs, Parse(rel, data))
 			snap[rel] = sha256.Sum256(data)
 			return nil
@@ -84,6 +100,7 @@ func Scan(ctx context.Context, root string, cfg *core.Config) ([]core.Document, 
 // every other diagnostic.
 func Parse(path string, data []byte) core.Document {
 	doc := core.Document{Path: path}
+	data = bytes.TrimPrefix(data, bom)
 	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
 	if len(lines) == 0 || strings.TrimRight(lines[0], " \t") != "---" {
 		doc.ParseErr = &core.Diagnostic{Path: path, Line: 1, Message: "must start with YAML frontmatter: a line containing only ---"}
@@ -111,6 +128,9 @@ func Parse(path string, data []byte) core.Document {
 	doc.Sections = parseBody(lines[end+1:], end+2)
 	return doc
 }
+
+// bom is the UTF-8 byte order mark some editors write at the start of a file.
+var bom = []byte("\ufeff")
 
 // frontmatterOffset converts a line within the frontmatter YAML to a file
 // line: the YAML starts on line 2.
@@ -208,22 +228,22 @@ func parseBody(lines []string, firstLine int) []core.Section {
 		lineNo := firstLine + i
 		trimmed := strings.TrimSpace(line)
 		if fence != "" {
-			if strings.HasPrefix(trimmed, fence) {
+			if isClosingFence(trimmed, fence) {
 				fence = ""
 			}
 			body = append(body, line)
 			continue
 		}
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+		if f := openingFence(trimmed); f != "" {
 			flushItem()
-			fence = trimmed[:3]
+			fence = f
 			body = append(body, line)
 			continue
 		}
 		if strings.HasPrefix(line, "## ") || line == "##" || strings.HasPrefix(line, "# ") {
 			flushSection()
 			if strings.HasPrefix(line, "## ") {
-				cur = &core.Section{Heading: strings.TrimSpace(strings.TrimRight(strings.TrimPrefix(line, "## "), "# ")), Line: lineNo}
+				cur = &core.Section{Heading: headingText(strings.TrimPrefix(line, "## ")), Line: lineNo}
 			}
 			continue
 		}
@@ -246,6 +266,37 @@ func parseBody(lines []string, firstLine int) []core.Section {
 	}
 	flushSection()
 	return sections
+}
+
+// openingFence returns the fence that a trimmed line opens: three or more
+// backticks or tildes, which may be followed by an info string such as "go".
+func openingFence(trimmed string) string {
+	for _, c := range []byte{'`', '~'} {
+		n := 0
+		for n < len(trimmed) && trimmed[n] == c {
+			n++
+		}
+		if n >= 3 {
+			return trimmed[:n]
+		}
+	}
+	return ""
+}
+
+// isClosingFence reports whether a trimmed line closes fence: only the same
+// character, at least as many times, with no info string.
+func isClosingFence(trimmed, fence string) bool {
+	return len(trimmed) >= len(fence) && strings.Trim(trimmed, fence[:1]) == ""
+}
+
+// headingText returns a heading's text without an optional closing run of
+// "#" characters, which counts only after a space: "## C#" is "C#".
+func headingText(s string) string {
+	s = strings.TrimSpace(s)
+	if t := strings.TrimRight(s, "#"); t == "" || strings.HasSuffix(t, " ") {
+		s = strings.TrimSpace(t)
+	}
+	return s
 }
 
 // codeSpanRE matches inline code, whose contents are never links.
@@ -276,7 +327,7 @@ type Stamp struct {
 // the file's line ending (LF or CRLF) is kept.
 func InsertStamp(data []byte, s Stamp) ([]byte, error) {
 	nl := bytes.IndexByte(data, '\n')
-	if nl < 0 || strings.TrimRight(string(data[:nl]), " \t\r") != "---" {
+	if nl < 0 || strings.TrimRight(string(bytes.TrimPrefix(data[:nl], bom)), " \t\r") != "---" {
 		return nil, errors.New("file does not start with frontmatter")
 	}
 	eol := "\n"

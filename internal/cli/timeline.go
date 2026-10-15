@@ -46,7 +46,7 @@ func (e *untrustedError) Error() string {
 		b.WriteString("this timeline uses external plugins, which run programs on your computer, and you have not approved them:\n")
 	}
 	for _, s := range e.specs {
-		fmt.Fprintf(&b, "  %s: %s\n", s.Name, s.Run)
+		fmt.Fprintf(&b, "  %s: %s\n", s.Name, shown(s.Run))
 	}
 	fmt.Fprintf(&b, "Review these programs, then run 'tline plugins trust' in %s to allow them.\nRun 'tline plugins' to see what they are.", e.root)
 	return b.String()

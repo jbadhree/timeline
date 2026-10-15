@@ -13,6 +13,7 @@ package goals
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jbadhree/timeline/core"
 )
@@ -160,7 +161,11 @@ func firstLine(s string) string {
 		s = s[:i]
 	}
 	if len(s) > 60 {
-		s = s[:57] + "..."
+		cut := 57
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut-- // never split a character
+		}
+		s = s[:cut] + "..."
 	}
 	return s
 }

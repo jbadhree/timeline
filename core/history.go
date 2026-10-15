@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"strings"
+	"time"
+	"unicode/utf8"
 )
 
 // History facts a check needs, read from the history folder by the caller.
@@ -14,6 +16,9 @@ type History struct {
 	// LastPaths maps an event path to the ID whose latest copy was saved from
 	// that path.
 	LastPaths map[string]string
+	// LastSavedAt maps an event path to when that latest copy was saved, if
+	// known.
+	LastSavedAt map[string]time.Time
 }
 
 // checkHistory compares recorded events of history types with their first
@@ -32,7 +37,7 @@ func (v *validator) checkHistory() {
 		}
 		first := h.FirstVersions[e.id]
 		if first == nil {
-			if other := h.LastPaths[e.doc.Path]; other != "" && other != e.id && !current[other] {
+			if other := h.LastPaths[e.doc.Path]; other != "" && other != e.id && !current[other] && !newEventAtPath(e.doc, h, other) {
 				f, _ := e.doc.Field(FieldID)
 				v.add(Diagnostic{Path: e.doc.Path, Line: f.Line, Field: FieldID, Message: fmt.Sprintf("is %s, but this file was recorded as %s; recorded stamps must not change", e.id, other)})
 			}
@@ -49,6 +54,29 @@ func (v *validator) checkHistory() {
 			}
 		}
 	}
+}
+
+// newEventAtPath reports whether doc, which has no history yet, is a new
+// event recorded at a path whose earlier event, other, was removed, rather
+// than other with its ID changed. A changed ID keeps other's entered_at; a new
+// event was entered no earlier than other's last copy was saved.
+func newEventAtPath(doc *Document, h History, other string) bool {
+	f, ok := doc.Field(FieldEnteredAt)
+	saved := h.LastSavedAt[doc.Path]
+	if !ok || saved.IsZero() {
+		return false
+	}
+	at, err := parseTimeValue(f.Value)
+	if err != nil || at.Before(saved) {
+		return false
+	}
+	if first := h.FirstVersions[other]; first != nil {
+		if was, ok := first.Field(FieldEnteredAt); ok {
+			wasAt, err := parseTimeValue(was.Value)
+			return err == nil && !wasAt.Equal(at)
+		}
+	}
+	return at.After(saved)
 }
 
 func (v *validator) compareField(e *event, first *Document, name, problem string) {
@@ -115,7 +143,11 @@ func showValue(rv RawValue) string {
 func excerpt(body string) string {
 	s := strings.Join(strings.Fields(body), " ")
 	if len(s) > 80 {
-		s = s[:77] + "..."
+		cut := 77
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut-- // never split a character
+		}
+		s = s[:cut] + "..."
 	}
 	return s
 }

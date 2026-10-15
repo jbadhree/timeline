@@ -25,7 +25,7 @@ type historyResult struct {
 // version of every event with history, and the path each ID was last saved
 // from.
 func loadHistory(store history.Store, cfg *core.Config) (core.History, error) {
-	h := core.History{FirstVersions: map[string]*core.Document{}, LastPaths: map[string]string{}}
+	h := core.History{FirstVersions: map[string]*core.Document{}, LastPaths: map[string]string{}, LastSavedAt: map[string]time.Time{}}
 	for _, t := range cfg.Types {
 		if !t.History {
 			continue
@@ -42,8 +42,9 @@ func loadHistory(store history.Store, cfg *core.Config) (core.History, error) {
 			if len(versions) == 0 {
 				continue
 			}
-			if p := versions[len(versions)-1].EventPath; p != "" {
-				h.LastPaths[p] = id
+			if last := versions[len(versions)-1]; last.EventPath != "" {
+				h.LastPaths[last.EventPath] = id
+				h.LastSavedAt[last.EventPath] = last.SavedAt
 			}
 			if versions[0].N != 1 {
 				continue // v1 is missing; nothing to compare against

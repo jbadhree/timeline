@@ -3,6 +3,8 @@ package core
 import (
 	"strings"
 	"testing"
+	"time"
+	"unicode/utf8"
 )
 
 func historyType() *Config {
@@ -72,5 +74,45 @@ func TestChangedParts(t *testing.T) {
 	}
 	if f, s := ChangedParts(&older, &older); len(f) != 0 || len(s) != 0 {
 		t.Errorf("identical versions changed: %v %v", f, s)
+	}
+}
+
+func TestExcerptKeepsCharactersWhole(t *testing.T) {
+	long := strings.Repeat("é", 41) // 82 bytes; byte 77 is inside a character
+	got := excerpt(long)
+	if !utf8.ValidString(got) || !strings.HasSuffix(got, "...") || len(got) > 80 {
+		t.Errorf("excerpt = %q", got)
+	}
+	if excerpt("  short\n text ") != "short text" {
+		t.Errorf("short text changed: %q", excerpt("  short\n text "))
+	}
+}
+
+// A path's last copy belonged to a removed event. A file there with another
+// ID is either that event with its ID changed, which keeps its entered_at, or
+// a new event recorded after the copy was saved.
+func TestNewEventAtARemovedEventsPath(t *testing.T) {
+	const oldID = "01M3VW7KR0FFWVGBE1D5GYN31Q"
+	old := predictionDoc(nil, "", "") // entered 2026-10-01T00:00:00Z
+	h := History{
+		FirstVersions: map[string]*Document{oldID: &old},
+		LastPaths:     map[string]string{"predictions/p.md": oldID},
+		LastSavedAt:   map[string]time.Time{"predictions/p.md": time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)},
+	}
+	withEntered := func(at string) Document {
+		d := predictionDoc(nil, "", "")
+		d.Fields[1] = stamp("entered_at", at)
+		return d
+	}
+	for at, wantProblem := range map[string]bool{
+		"2026-10-01T00:00:00Z": true,  // the old event, ID changed
+		"2026-10-01T12:00:00Z": true,  // entered before the old event's last copy
+		"2026-10-02T00:00:00Z": false, // a new event, same second as the copy
+		"2026-10-03T00:00:00Z": false, // a new event
+	} {
+		res := mustCheck(t, CheckInput{Config: historyType(), Docs: []Document{withEntered(at)}, Now: testNow, History: h})
+		if got := len(res.Diagnostics) > 0; got != wantProblem {
+			t.Errorf("entered_at %s: problems %v, want %v", at, res.Diagnostics, wantProblem)
+		}
 	}
 }

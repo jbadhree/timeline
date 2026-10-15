@@ -145,6 +145,13 @@ func TestCheckUsageAndConfigErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	notEvents := writeFiles(t, map[string]string{
+		"timeline.yaml":     "version: 1\nplugins: []\ntypes:\n  note: { folder: notes, entry_timing: past }\n",
+		"notes/todo.txt":    "not an event",
+		"notes/.draft.md":   "hidden",
+		"notes/empty/.keep": "",
+	})
+
 	tests := []struct {
 		name     string
 		dir      string
@@ -157,6 +164,9 @@ func TestCheckUsageAndConfigErrors(t *testing.T) {
 		{"path outside folders", valid, []string{"check", "--dry-run", "timeline.yaml"}, 2, "not inside a configured type folder", ""},
 		{"path outside root", valid, []string{"check", "--dry-run", ".."}, 2, "outside the Timeline root", ""},
 		{"missing path", valid, []string{"check", "--dry-run", "tasks/nope.md"}, 2, "tasks/nope.md", ""},
+		{"not Markdown", notEvents, []string{"check", "--dry-run", "notes/todo.txt"}, 2, "notes/todo.txt is not an event file", ""},
+		{"hidden file", notEvents, []string{"check", "--dry-run", "notes/.draft.md"}, 2, "notes/.draft.md is not an event file", ""},
+		{"folder without events", notEvents, []string{"check", "--dry-run", "notes/empty"}, 0, "", "checked 0 events"},
 		{"invalid config", badConfig, []string{"check", "--dry-run"}, 3, "", "entry_timing is required"},
 	}
 	for _, tt := range tests {
@@ -344,5 +354,98 @@ func TestGoalAndTaskViews(t *testing.T) {
 	r = tline(t, fixture(t, "invalid"), "goal", "list")
 	if r.code != 5 || !strings.Contains(r.stderr, "result is incomplete") {
 		t.Errorf("invalid root: %+v", r)
+	}
+}
+
+func TestRecordedEventKeepsItsTimingRuleWhenTheTypeChanges(t *testing.T) {
+	root := writeFiles(t, map[string]string{
+		"timeline.yaml": "version: 1\nplugins: []\ntypes:\n  note: { folder: notes, entry_timing: future }\n",
+		"notes/a.md":    "---\ntype: note\ntimeline_at: 2099-01-01T00:00:00Z\ncreated_by: e2e\n---\n",
+	})
+	if r := tline(t, root, "check"); r.code != 0 {
+		t.Fatalf("recording: %+v", r)
+	}
+	// The type becomes past. The recorded event was entered in advance, as a
+	// future event, and stays valid; a new draft follows the new rule.
+	if err := os.WriteFile(filepath.Join(root, "timeline.yaml"), []byte("version: 1\nplugins: []\ntypes:\n  note: { folder: notes, entry_timing: past }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := tline(t, root, "check", "--dry-run"); r.code != 0 {
+		t.Fatalf("recorded event rejected after its type's rule changed: %+v", r)
+	}
+	if err := os.WriteFile(filepath.Join(root, "notes", "b.md"), []byte("---\ntype: note\ntimeline_at: 2099-01-01T00:00:00Z\ncreated_by: e2e\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := tline(t, root, "check", "--dry-run", "--json")
+	out := decodeCheck(t, r)
+	if r.code != 3 || len(out.Diagnostics) != 1 || out.Diagnostics[0].Path != "notes/b.md" || !strings.Contains(out.Diagnostics[0].Message, "a past event") {
+		t.Errorf("new draft should follow the type's new rule: %+v", r)
+	}
+}
+
+func TestCheckByteOrderMark(t *testing.T) {
+	root := writeFiles(t, map[string]string{
+		"timeline.yaml": "version: 1\nplugins: []\ntypes:\n  note: { folder: notes, entry_timing: future }\n",
+		"notes/a.md":    "\ufeff---\ntype: note\ntimeline_at: 2099-01-01T00:00:00Z\ncreated_by: e2e\n---\n\n## C#\n",
+	})
+	if r := tline(t, root, "check"); r.code != 0 {
+		t.Fatalf("check: %+v", r)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "notes", "a.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "\ufeff---\nid: ") || !strings.HasSuffix(string(data), "\n---\n\n## C#\n") {
+		t.Errorf("stamped file = %q", data)
+	}
+	if r := tline(t, root, "check", "--dry-run"); r.code != 0 {
+		t.Errorf("stamped file no longer valid: %+v", r)
+	}
+}
+
+// Timeline does not follow symbolic links: a linked event file or folder is a
+// validation problem, a linked type folder an error, and nothing is written.
+func TestCheckRejectsSymbolicLinks(t *testing.T) {
+	note := "---\ntype: note\ntimeline_at: 2099-01-01T00:00:00Z\ncreated_by: e2e\n---\n"
+	root := writeFiles(t, map[string]string{
+		"timeline.yaml": "version: 1\nplugins: []\ntypes:\n  note: { folder: notes, entry_timing: future }\n",
+		"shared/a.md":   note,
+		"notes/b.md":    note,
+	})
+	if err := os.Symlink(filepath.Join("..", "shared", "a.md"), filepath.Join(root, "notes", "a.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "shared"), filepath.Join(root, "notes", "more")); err != nil {
+		t.Fatal(err)
+	}
+	r := tline(t, root, "check", "--json")
+	out := decodeCheck(t, r)
+	if r.code != 3 || len(out.Diagnostics) != 2 || !strings.Contains(out.Diagnostics[0].Message, "symbolic link") {
+		t.Fatalf("linked file and folder: %+v", r)
+	}
+	for _, rel := range []string{"notes/b.md", "shared/a.md"} {
+		if data, err := os.ReadFile(filepath.Join(root, rel)); err != nil || string(data) != note {
+			t.Errorf("%s was written despite the problems: %q, %v", rel, data, err)
+		}
+	}
+
+	linked := writeFiles(t, map[string]string{
+		"timeline.yaml": "version: 1\nplugins: []\ntypes:\n  note: { folder: notes, entry_timing: future }\n",
+		"shared/a.md":   note,
+	})
+	if err := os.Symlink("shared", filepath.Join(linked, "notes")); err != nil {
+		t.Fatal(err)
+	}
+	if r := tline(t, linked, "check", "--dry-run"); r.code != 1 || !strings.Contains(r.stderr, "type folder notes is a symbolic link") {
+		t.Errorf("linked type folder: %+v", r)
+	}
+}
+
+func TestFolderNamedLikeHistoryInAnotherCaseIsReserved(t *testing.T) {
+	root := writeFiles(t, map[string]string{
+		"timeline.yaml": "version: 1\nplugins: []\ntypes:\n  note: { folder: History, entry_timing: past }\n",
+	})
+	if r := tline(t, root, "check", "--dry-run"); r.code != 3 || !strings.Contains(r.stdout, `folder "History" is reserved`) {
+		t.Errorf("got %+v", r)
 	}
 }

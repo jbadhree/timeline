@@ -216,6 +216,33 @@ func TestEnablingHistoryAndRepairingAMissingCopy(t *testing.T) {
 	}
 }
 
+// An event is removed and a new one recorded at its path, but the check
+// stops before saving the new event's v1. The next check must save it, not
+// mistake the new event for the old one with its ID changed.
+func TestNewEventAtARemovedPathRepairsItsMissingCopy(t *testing.T) {
+	fixedEffects(t)
+	root := historyRoot(t, historyConfig, map[string]string{"predictions/p.md": draftPrediction})
+	file := filepath.Join(root, "predictions", "p.md")
+	at(t, "2026-10-13T05:00:00Z")
+	if code, _ := runJSON(t, "--root", root, "--json", "check"); code != ExitOK {
+		t.Fatal("recording the first event failed")
+	}
+	if err := os.WriteFile(file, []byte(draftPrediction), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	at(t, "2026-10-14T05:00:00Z")
+	if code, _ := runJSON(t, "--root", root, "--json", "check"); code != ExitOK {
+		t.Fatal("recording the second event failed")
+	}
+	if err := os.RemoveAll(filepath.Join(root, "history", "predictions", eventID(t, file))); err != nil {
+		t.Fatal(err)
+	}
+	code, res := runJSON(t, "--root", root, "--json", "check")
+	if code != ExitOK || len(res.History) != 1 || res.History[0].Reason != "late" {
+		t.Fatalf("repair: exit %d, %+v", code, res)
+	}
+}
+
 func TestHistoryFollowsMovesAndKeepsRemovedEvents(t *testing.T) {
 	fixedEffects(t)
 	root := historyRoot(t, historyConfig, map[string]string{"predictions/p.md": draftPrediction})

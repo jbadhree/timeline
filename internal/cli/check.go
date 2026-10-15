@@ -301,10 +301,17 @@ func selectPaths(root, cwd string, cfg *core.Config, docs []core.Document, args 
 		if !inFolder {
 			return nil, fmt.Errorf("%s is not inside a configured type folder", arg)
 		}
+		matched := false
 		for _, d := range docs {
 			if d.Path == rel || rel == "." || strings.HasPrefix(d.Path, rel+"/") {
 				selected = append(selected, d.Path)
+				matched = true
 			}
+		}
+		// A named file that is not an event file would otherwise be checked
+		// as nothing and reported valid.
+		if !matched && !info.IsDir() {
+			return nil, fmt.Errorf("%s is not an event file; event files end in .md and are not hidden", arg)
 		}
 	}
 	return selected, nil

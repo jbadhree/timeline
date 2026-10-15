@@ -107,3 +107,53 @@ func TestMarketsExampleHasFrozenPredictions(t *testing.T) {
 		t.Fatalf("frozen ticker: %+v", r)
 	}
 }
+
+func TestNewEventAtARemovedPathAfterAStoppedCheck(t *testing.T) {
+	root := writeFiles(t, map[string]string{"timeline.yaml": historyTimeline, "predictions/p.md": historyDraft})
+	file := filepath.Join(root, "predictions", "p.md")
+	if r := tline(t, root, "check"); r.code != 0 {
+		t.Fatalf("recording: %+v", r)
+	}
+	// Make the first event's copy old, as if it was recorded long ago.
+	dirs, err := filepath.Glob(filepath.Join(root, "history", "predictions", "*"))
+	if err != nil || len(dirs) != 1 {
+		t.Fatalf("history dirs = %v, %v", dirs, err)
+	}
+	logPath := filepath.Join(dirs[0], "versions.log")
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := strings.Fields(string(log))
+	if err := os.WriteFile(logPath, []byte(strings.Replace(string(log), fields[1], "2000-01-01T00:00:00Z", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	v1Path := filepath.Join(dirs[0], "v1.md")
+	v1, err := os.ReadFile(v1Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(v1Path, []byte(strings.Replace(string(v1), "entered_at: "+fields[1], "entered_at: 2000-01-01T00:00:00Z", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Replace it with a new event, then lose the new event's v1, as a check
+	// stopped between stamping and saving would.
+	if err := os.WriteFile(file, []byte(historyDraft), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := tline(t, root, "check"); r.code != 0 {
+		t.Fatalf("recording the new event: %+v", r)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := strings.TrimPrefix(strings.Split(string(data), "\n")[1], "id: ")
+	if err := os.RemoveAll(filepath.Join(root, "history", "predictions", id)); err != nil {
+		t.Fatal(err)
+	}
+	if r := tline(t, root, "check"); r.code != 0 || !strings.Contains(r.stdout, "v1  late") {
+		t.Errorf("the next check should save the missing copy: %+v", r)
+	}
+}

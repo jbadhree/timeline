@@ -179,3 +179,25 @@ func TestPluginCommandFailure(t *testing.T) {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }
+
+// A command sees the problems tline check reports in history types, such as
+// a changed frozen field, and so marks its result incomplete.
+func TestPluginCommandSeesHistoryProblems(t *testing.T) {
+	fixedEffects(t)
+	usePlugins(t, decisionsPlugin{})
+	root := decisionRoot(t, nil)
+	cfg := testConfig + "  decision: { folder: decisions, history: true, frozen: [status] }\n"
+	if err := os.WriteFile(filepath.Join(root, "timeline.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, stdout, stderr := run3("--root", root, "check", filepath.Join(root, "decisions")); code != ExitOK {
+		t.Fatalf("recording: exit %d\n%s%s", code, stdout, stderr)
+	}
+	if code, _, _ := run3("--root", root, "decision", "current"); code != ExitOK {
+		t.Fatalf("before the change: exit %d", code)
+	}
+	edit(t, filepath.Join(root, "decisions", "b.md"), "status: superseded", "status: current")
+	if code, _, stderr := run3("--root", root, "decision", "current"); code != ExitIncomplete || !strings.Contains(stderr, "incomplete") {
+		t.Errorf("after changing a frozen field: exit %d, stderr %q", code, stderr)
+	}
+}

@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/jbadhree/timeline/internal/config"
 	"github.com/jbadhree/timeline/internal/plugins/external"
@@ -200,13 +202,26 @@ func pluginsText(out pluginsOutput) string {
 		where := "not found"
 		switch {
 		case p.Program != "" && p.InTimeline:
-			where = "a program inside this timeline: " + p.Program
+			where = "a program inside this timeline: " + shown(p.Program)
 		case p.Program != "":
-			where = "found on PATH at " + p.Program
+			where = "found on PATH at " + shown(p.Program)
 		}
-		fmt.Fprintf(&b, "  %s\n    runs:    %s\n    program: %s\n    timeout: %s\n", p.Name, p.Run, where, p.Timeout)
+		fmt.Fprintf(&b, "  %s\n    runs:    %s\n    program: %s\n    timeout: %s\n", p.Name, shown(p.Run), where, p.Timeout)
 	}
 	return b.String()
+}
+
+// shown returns text from a timeline, such as a plugin's run setting, for a
+// person to review in a terminal. Text with control or other invisible
+// characters is quoted with them escaped, so the file cannot hide or redraw
+// part of what the person is approving.
+func shown(s string) string {
+	for _, r := range s {
+		if !unicode.IsPrint(r) {
+			return strconv.Quote(s)
+		}
+	}
+	return s
 }
 
 func renderPlugins(stdout, stderr io.Writer, asJSON bool, out pluginsOutput, trusting bool) int {

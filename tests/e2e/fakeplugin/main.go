@@ -1,7 +1,7 @@
 // Command fakeplugin is an external tline plugin for end-to-end tests. Its
 // behavior is chosen by environment variables, which tline passes through:
 //
-//	FAKE_MODE      normal (default), crash, hang, badjson, version, misname, foreign
+//	FAKE_MODE      normal (default), crash, hang, badjson, version, misname, badstatus, foreign
 //	FAKE_NAME      the plugin name it describes (default "fake")
 //	FAKE_COMMAND   its command name (default "widget")
 //	FAKE_TYPE      its type name (default "widget")
@@ -85,13 +85,17 @@ func main() {
 		if mode == "version" {
 			protocols = []int{2}
 		}
+		closed := []string{"done"}
+		if mode == "badstatus" {
+			closed = []string{"finished"}
+		}
 		resp = map[string]any{
 			"name":      name,
 			"protocols": protocols,
 			"types": []any{map[string]any{
 				"name": typ, "entry_timing": "future",
 				"fields": map[string]any{"size": map[string]any{"type": "number", "required": true}},
-				"status": map[string]any{"values": []string{"open", "done"}, "closed": []string{"done"}},
+				"status": map[string]any{"values": []string{"open", "done"}, "closed": closed},
 			}},
 			"validates": true,
 			"commands": []any{map[string]any{

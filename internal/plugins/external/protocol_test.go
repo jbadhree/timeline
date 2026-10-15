@@ -24,6 +24,7 @@ func TestDecodeTemplate(t *testing.T) {
 		{templateJSON{Name: "w", EntryTiming: "future", Fields: map[string]fieldJSON{"timeline_at": {Type: "time"}}}, "shared field"},
 		{templateJSON{Name: "w", EntryTiming: "real_time"}, "needs max_delay"},
 		{templateJSON{Name: "w", EntryTiming: "future", Status: &statusJSON{}}, "status needs values"},
+		{templateJSON{Name: "w", EntryTiming: "future", Status: &statusJSON{Values: []string{"open"}, Closed: []string{"done"}}}, `closed status "done"`},
 	} {
 		if _, err := decodeTemplate(bad.tj); err == nil || !strings.Contains(err.Error(), bad.want) {
 			t.Errorf("%+v: error %v, want %q", bad.tj, err, bad.want)

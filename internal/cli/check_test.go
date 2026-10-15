@@ -136,6 +136,28 @@ func TestCheckFutureDraftThatHasPassed(t *testing.T) {
 	}
 }
 
+// The entry time is read after validation and the drafts are checked again
+// against it, so a Future draft whose time passes during validation is not
+// recorded.
+func TestCheckFutureDraftThatPassesDuringValidation(t *testing.T) {
+	fixedEffects(t)
+	due := time.Date(2026, 10, 13, 6, 0, 0, 0, time.UTC)
+	reads := 0
+	now = func() time.Time {
+		reads++
+		if reads == 1 {
+			return due.Add(-time.Second) // validation: still in the future
+		}
+		return due // recording: no longer in the future
+	}
+	draft := strings.Replace(draftTask, "2099-01-01T00:00:00Z", due.Format(time.RFC3339), 1)
+	root := writeRoot(t, map[string]string{"tasks/a.md": draft})
+	code, res := runJSON(t, "--root", root, "--json", "check")
+	if code != ExitValidation || len(res.Stamped) != 0 || reads != 2 || readFile(t, filepath.Join(root, "tasks", "a.md")) != draft {
+		t.Fatalf("exit %d, clock reads %d, %+v", code, reads, res)
+	}
+}
+
 func TestCheckStopsWhenAFileChangesDuringTheCheck(t *testing.T) {
 	fixedEffects(t)
 	root := writeRoot(t, map[string]string{"tasks/a.md": draftTask, "tasks/b.md": draftTask})
@@ -254,4 +276,34 @@ type clashPlugin struct{}
 func (clashPlugin) Name() string { return "clash" }
 func (clashPlugin) Types() []core.TypeDef {
 	return []core.TypeDef{{Name: "task", Timing: core.Future}}
+}
+
+func TestSelectPaths(t *testing.T) {
+	root := writeRoot(t, map[string]string{"tasks/a.md": draftTask, "tasks/sub/b.md": draftTask, "tasks/notes.txt": "x"})
+	cfg := &core.Config{Types: []core.TypeDef{{Name: "task", Folder: "tasks"}}}
+	docs := []core.Document{{Path: "tasks/a.md"}, {Path: "tasks/sub/b.md"}}
+	for _, tc := range []struct {
+		args []string
+		want string // selected paths joined by spaces, or an error substring
+	}{
+		{nil, "<nil>"},
+		{[]string{"tasks/a.md"}, "tasks/a.md"},
+		{[]string{"tasks/sub"}, "tasks/sub/b.md"},
+		{[]string{"."}, "tasks/a.md tasks/sub/b.md"},
+		{[]string{"tasks/notes.txt"}, "is not an event file"},
+		{[]string{"timeline.yaml"}, "not inside a configured type folder"},
+		{[]string{".."}, "outside the Timeline root"},
+	} {
+		got, err := selectPaths(root, root, cfg, docs, tc.args)
+		s := strings.Join(got, " ")
+		switch {
+		case err != nil:
+			s = err.Error()
+		case got == nil:
+			s = "<nil>"
+		}
+		if !strings.Contains(s, tc.want) {
+			t.Errorf("selectPaths(%v) = %q, want %q", tc.args, s, tc.want)
+		}
+	}
 }

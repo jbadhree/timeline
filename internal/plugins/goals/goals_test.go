@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jbadhree/timeline/core"
 	"github.com/jbadhree/timeline/internal/config"
@@ -263,5 +264,17 @@ types:
 	}}, goals.New(), goals.New().Commands()[0], []string{"tree"}, false)
 	if err != nil || !strings.Contains(out.Text, "└─ [open] Keep the floor clean") || !strings.Contains(out.Text, "└─ [open] Sweep the floor") {
 		t.Errorf("tree over renamed types:\n%s (%v)", out.Text, err)
+	}
+}
+
+func TestLongStepTextIsShortenedWithoutSplittingCharacters(t *testing.T) {
+	step := strings.Repeat("é", 31) // 62 bytes; byte 57 is inside a character
+	res := check(t, map[string]string{"goals/g.md": goalMD("- " + step + "\n  more text\n")})
+	if len(res.Diagnostics) != 1 {
+		t.Fatalf("got %v", res.Diagnostics)
+	}
+	msg := res.Diagnostics[0].Message
+	if !utf8.ValidString(msg) || strings.Contains(msg, `\x`) || !strings.Contains(msg, `..." must link`) || strings.Contains(msg, "more text") {
+		t.Errorf("message = %q", msg)
 	}
 }

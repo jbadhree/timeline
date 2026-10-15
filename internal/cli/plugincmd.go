@@ -13,6 +13,7 @@ import (
 	"github.com/jbadhree/timeline/core"
 	"github.com/jbadhree/timeline/internal/config"
 	"github.com/jbadhree/timeline/internal/document"
+	"github.com/jbadhree/timeline/internal/history"
 	"github.com/jbadhree/timeline/internal/plugins/external"
 )
 
@@ -226,7 +227,14 @@ func runPluginCommand(ctx context.Context, opts Options, tl *loaded, pc pluginCo
 		return ExitFailure
 	}
 
-	out, err := core.RunCommand(ctx, core.CheckInput{Config: tl.cfg, Docs: docs, Now: clock(), Plugins: tl.plugins}, pc.plugin, pc.cmd, rest, opts.JSON)
+	// Commands see the same problems tline check reports, including changed
+	// stamps and frozen fields in history types.
+	hist, err := loadHistory(history.Store{Root: tl.root}, tl.cfg)
+	if err != nil {
+		diagnose(stderr, "reading history: %v", err)
+		return ExitFailure
+	}
+	out, err := core.RunCommand(ctx, core.CheckInput{Config: tl.cfg, Docs: docs, Now: clock(), Plugins: tl.plugins, History: hist}, pc.plugin, pc.cmd, rest, opts.JSON)
 	if err != nil {
 		var uerr core.UsageError
 		if errors.As(err, &uerr) {

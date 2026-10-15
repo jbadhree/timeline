@@ -33,3 +33,18 @@ func TestPluginsTrustAsksInATerminal(t *testing.T) {
 		t.Errorf("status after approval: %q", stdout)
 	}
 }
+
+func TestShownEscapesInvisibleCharacters(t *testing.T) {
+	for in, want := range map[string]string{
+		"./tools/lint":              "./tools/lint",
+		"./tools/plugin with space": "./tools/plugin with space",
+		"./tools/ünïcode":           "./tools/ünïcode",
+		"./a\x1b[2K\r./b":           `"./a\x1b[2K\r./b"`,
+		"./a\u202etxt.exe":          `"./a\u202etxt.exe"`, // right-to-left override
+		"./a\nb":                    `"./a\nb"`,
+	} {
+		if got := shown(in); got != want {
+			t.Errorf("shown(%q) = %s, want %s", in, got, want)
+		}
+	}
+}

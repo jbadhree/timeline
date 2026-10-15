@@ -591,9 +591,13 @@ func (d *decoder) cleanFolder(n *yaml.Node, s, what string) string {
 		d.errf(n, "%s: folder must be a subfolder of the root", what)
 		return ""
 	}
-	if c == ".tline" || strings.HasPrefix(c, ".tline/") || c == ".git" || strings.HasPrefix(c, ".git/") || c == history.Folder || strings.HasPrefix(c, history.Folder+"/") {
-		d.errf(n, "%s: folder %q is reserved", what, c)
-		return ""
+	// Compared without case: on case-insensitive filesystems, such as most on
+	// macOS, "History" is the history folder.
+	for _, reserved := range []string{".tline", ".git", history.Folder} {
+		if lc := strings.ToLower(c); lc == reserved || strings.HasPrefix(lc, reserved+"/") {
+			d.errf(n, "%s: folder %q is reserved", what, c)
+			return ""
+		}
 	}
 	return c
 }
@@ -680,14 +684,16 @@ func (d *decoder) decodeFields(n *yaml.Node, what, plugin string, reserved []str
 	return out
 }
 
-// checkFolders rejects folders shared by two types or nested in one another.
+// checkFolders rejects folders shared by two types or nested in one another,
+// ignoring case, since case-insensitive filesystems treat them as the same.
 func (d *decoder) checkFolders(cfg *core.Config, n *yaml.Node) {
 	for i, a := range cfg.Types {
 		for _, b := range cfg.Types[i+1:] {
+			af, bf := strings.ToLower(a.Folder), strings.ToLower(b.Folder)
 			switch {
-			case a.Folder == b.Folder:
+			case af == bf:
 				d.errf(n, "types %s and %s both use folder %q", a.Name, b.Name, a.Folder)
-			case strings.HasPrefix(a.Folder, b.Folder+"/") || strings.HasPrefix(b.Folder, a.Folder+"/"):
+			case strings.HasPrefix(af, bf+"/") || strings.HasPrefix(bf, af+"/"):
 				d.errf(n, "folders of types %s (%s) and %s (%s) must not be nested", a.Name, a.Folder, b.Name, b.Folder)
 			}
 		}

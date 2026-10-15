@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -48,6 +50,36 @@ func buildAndRun(m *testing.M) int {
 	return m.Run()
 }
 
+// openSources opens every Go source and module file under root. The binaries
+// are built in a subprocess, which go test cannot see; files a test opens
+// while tests run (not in TestMain) are part of its cache key, so a change to
+// any of them reruns these tests instead of reporting a cached result for an
+// older tline. tlineEnv calls it once.
+var sourcesOpened sync.Once
+
+func openSources(root string) error {
+	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if p != root && (strings.HasPrefix(name, ".") || name == "bin" || name == "dist" || name == "testdata") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum" {
+			return nil
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			return err
+		}
+		return f.Close()
+	})
+}
+
 type result struct {
 	code           int
 	stdout, stderr string
@@ -61,6 +93,11 @@ func tline(t *testing.T, dir string, args ...string) result {
 // tlineEnv runs tline with extra environment variables such as "NAME=value".
 func tlineEnv(t *testing.T, dir string, env []string, args ...string) result {
 	t.Helper()
+	sourcesOpened.Do(func() {
+		if err := openSources(filepath.Join("..", "..")); err != nil {
+			t.Fatalf("reading sources: %v", err)
+		}
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, tlineBin, args...)

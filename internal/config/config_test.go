@@ -96,6 +96,8 @@ func TestDecodeErrors(t *testing.T) {
 		{"shared field", "version: 1\ntypes:\n  news:\n    folder: news\n    entry_timing: past\n    fields: { timeline_at: { type: time } }\n", `cannot redefine the shared field "timeline_at"`},
 		{"same folder", "version: 1\ntypes:\n  a: { folder: x, entry_timing: past }\n  b: { folder: x, entry_timing: past }\n", "both use folder"},
 		{"nested folders", "version: 1\ntypes:\n  a: { folder: x, entry_timing: past }\n  b: { folder: x/y, entry_timing: past }\n", "must not be nested"},
+		{"same folder but for case", "version: 1\ntypes:\n  a: { folder: Notes, entry_timing: past }\n  b: { folder: notes, entry_timing: past }\n", "both use folder"},
+		{"nested but for case", "version: 1\ntypes:\n  a: { folder: X, entry_timing: past }\n  b: { folder: x/y, entry_timing: past }\n", "must not be nested"},
 		{"folder outside root", "version: 1\ntypes:\n  a: { folder: ../x, entry_timing: past }\n", "subfolder of the root"},
 		{"list without items", "version: 1\ntypes:\n  a:\n    folder: a\n    entry_timing: past\n    fields: { tags: { type: list } }\n", "a list needs items"},
 		{"closed not in values", "version: 1\ntypes:\n  a:\n    folder: a\n    entry_timing: past\n    status: { values: [open], closed: [done] }\n", `closed status "done"`},
@@ -300,7 +302,7 @@ types:
 			t.Errorf("%q: error %v, want %q", tc.extra, err, tc.want)
 		}
 	}
-	for _, folder := range []string{"history", "history/notes"} {
+	for _, folder := range []string{"history", "history/notes", "History", ".Git", ".TLINE/x"} {
 		_, err := Decode([]byte("version: 1\ntypes:\n  n: { folder: "+folder+", entry_timing: past }\n"), plugins)
 		if err == nil || !strings.Contains(err.Error(), "is reserved") {
 			t.Errorf("folder %s: %v", folder, err)

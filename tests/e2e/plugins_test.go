@@ -179,6 +179,7 @@ func TestExternalPluginFailures(t *testing.T) {
 		{"badjson", "plugin fake returned invalid JSON"},
 		{"version", "plugin fake supports protocol versions [2], but this tline speaks version 1"},
 		{"misname", `plugin fake describes itself as "someone-else"`},
+		{"badstatus", `plugin fake: type "widget": closed status "finished" is not one of the status values`},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			env, _ := trusted(t, "FAKE_MODE="+tc.mode)
@@ -350,6 +351,22 @@ func TestExamplePlugins(t *testing.T) {
 	} {
 		if !strings.Contains(r.stdout, want) {
 			t.Errorf("missing %q in:\n%s", want, r.stdout)
+		}
+	}
+}
+
+// A timeline must not be able to hide what it asks the user to approve, for
+// example with terminal escapes that redraw the review.
+func TestPluginReviewShowsHiddenCharacters(t *testing.T) {
+	root := writeFiles(t, map[string]string{
+		"timeline.yaml": "version: 1\nplugins:\n  - lint: { run: \"./tools/other\\e[2K\\r    runs:    ./tools/lint\" }\ntypes: {}\n",
+	})
+	env, _ := pluginEnv(t)
+	for _, args := range [][]string{{"plugins"}, {"plugins", "trust"}, {"check"}} {
+		r := tlineEnv(t, root, env, args...)
+		all := r.stdout + r.stderr
+		if strings.ContainsAny(all, "\x1b\r") || !strings.Contains(all, `"./tools/other\x1b[2K\r    runs:    ./tools/lint"`) {
+			t.Errorf("tline %v: %q", args, all)
 		}
 	}
 }
