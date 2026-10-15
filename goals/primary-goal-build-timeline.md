@@ -58,6 +58,7 @@ Decided in [plan with goals](../decisions/plan-with-goals.md).
 - [Goals and tasks](goals-and-tasks.md)
 - [Write a quickstart for people and an instruction page for agents](../tasks/user-and-agent-guides.md)
 - [Build release executables](../tasks/build-release-executables.md)
+- [Review the code written so far](review-the-code.md)
 - [Run the first-release demo](../tasks/run-first-release-demo.md)
 
 ## Done when
@@ -85,10 +86,11 @@ Recording and reading are the whole loop, and goals and tasks are views over the
 | `tline check [paths...]` | Validate files and, if all pass, stamp new drafts with their ID, entry time, and timing rule |
 | `tline list` | List events with time and field filters, file paths, past-due flags, and drafts shown separately |
 | `tline history <event>` | List or print the saved versions of an event whose type keeps history |
+| `tline plugins`, `plugins trust`, `plugins untrust` | Review and approve a timeline's external plugins |
 | `tline goal list`, `goal show`, `goal tree` | Goal views |
 | `tline task list`, `task show` | Task views |
 
-All commands support readable terminal output and `--json` for agents. JSON on stdout stays parseable; incidental logging goes to stderr. Diagnostics identify the file, field or section, and reason. Exit codes distinguish success, validation failure, conflict, incomplete results, usage errors, and operational failure. So far: 0 success, 1 operational failure, 2 usage error, 3 validation failure, 4 conflict (another check holds the lock, or a file changed during the check), 5 incomplete result (a view could not account for every relevant event); all values are provisional until the first release.
+All commands support readable terminal output and `--json` for agents. JSON on stdout stays parseable; incidental logging goes to stderr. Diagnostics identify the file, field or section, and reason. Exit codes distinguish success, validation failure, conflict, incomplete results, usage errors, and operational failure. So far: 0 success, 1 operational failure, 2 usage error, 3 validation failure, 4 conflict (another check holds the lock, or a file changed during the check), 5 incomplete result (a view could not account for every relevant event), 6 external plugins not approved; all values are provisional until the first release.
 
 ## Not in scope
 
@@ -104,6 +106,7 @@ Intended, not planned yet. Current decisions should not make them harder.
 - **Link graph:** building and traversing the graph formed by all Markdown links.
 - **Record store:** a database, local or hosted, that records every stamp and version across repos, imports the file history in `history/`, and detects stamps typed by hand before an event's first copy. It also makes reads fast for large timelines. Until it exists, entry times protect against honest mistakes only.
 - **Integrity:** stronger tamper evidence, such as signed records or external timestamps.
+- **Plugin marketplace:** sharing plugins between timelines and people, with an approval mechanism that covers everything a plugin runs and loads, not only its program file.
 - **A TUI** and other front ends built on the same core.
 
 ## Changing the plan

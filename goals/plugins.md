@@ -12,7 +12,7 @@ status: open
 
 ## Why
 
-Every domain gives its events and links its own meaning: goals have children, decisions supersede each other, incidents have follow-ups. Timeline should hold the facts that are true everywhere and let plugins add meaning, so new kinds of events need no change to Timeline. Decided in [link meanings belong to plugins](../decisions/relations-in-plugins.md), [goal and task ship as a built-in plugin](../decisions/goals-and-tasks-as-plugin.md), [external plugins over JSON](../decisions/external-plugins.md), and [approve external plugins per timeline](../decisions/plugin-approval.md).
+Every domain gives its events and links its own meaning: goals have children, decisions supersede each other, incidents have follow-ups. Timeline should hold the facts that are true everywhere and let plugins add meaning, so new kinds of events need no change to Timeline. Decided in [link meanings belong to plugins](../decisions/relations-in-plugins.md), [goal and task ship as a built-in plugin](../decisions/goals-and-tasks-as-plugin.md), [external plugins over JSON](../decisions/external-plugins.md), [approve external plugins per timeline](../decisions/plugin-approval.md), and [fingerprint only plugin programs for now](../decisions/plugin-fingerprint-scope.md).
 
 ## How
 
@@ -25,6 +25,7 @@ Every domain gives its events and links its own meaning: goals have children, de
 - [Approve external plugins per timeline](../tasks/plugin-trust.md)
 - [Add example external plugins in Python and Go](../tasks/plugin-examples.md)
 - [Write the plugin guide and protocol reference](../tasks/plugin-guide.md)
+- [Decide whether plugin approval covers the files a plugin program loads](../tasks/fingerprint-plugin-files.md)
 
 ## Done when
 
@@ -100,4 +101,4 @@ The external adapter implements the same core interfaces as built-in plugins, so
 
 ### Approval
 
-A timeline's external plugins run only after its user approves them with `tline plugins trust`, which records the root's path and a fingerprint of the plugin settings and of any plugin program inside the root, in the user's configuration directory (`$TLINE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/tline`, else `~/.config/tline`). Without approval, or after the fingerprint changes, commands that need the plugins exit 6 and say how to review and approve them. `tline plugins` shows each plugin and whether it is approved; `tline plugins untrust` removes the approval. Approval asks for confirmation in a terminal and requires `--yes` otherwise. `TLINE_TRUST_PLUGINS=1` skips approval, for CI.
+A timeline's external plugins run only after its user approves them with `tline plugins trust`, which records the root's path and a fingerprint of the plugin settings and of any plugin program inside the root, in the user's configuration directory (`$TLINE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/tline`, else `~/.config/tline`). Without approval, or after the fingerprint changes, commands that need the plugins exit 6 and say how to review and approve them. Only the program file is fingerprinted, not files it loads, which is acceptable while a timeline's plugins are written by its own users; a marketplace will need more. `tline plugins` shows each plugin and whether it is approved, quoting any `run` setting that contains control or other invisible characters so a timeline cannot hide part of what the user approves; `tline plugins untrust` removes the approval. Approval asks for confirmation in a terminal and requires `--yes` otherwise. `TLINE_TRUST_PLUGINS=1` skips approval, for CI.

@@ -50,9 +50,12 @@ Validation, stamping, queries, and goal and task views live in a reusable core. 
 | `internal/document/` | Markdown and frontmatter decoding, stamping, safe file rewrites |
 | `internal/lock/` | The per-root writer lock |
 | `internal/plugins/goals/` | The built-in goals plugin: goal and task types and their rules |
-| `tests/integration/`, `tests/e2e/` | Real-filesystem and built-executable scenarios |
+| `internal/history/` | Plain-file copies of earlier event versions |
+| `internal/trust/` | The user's approvals of external plugins |
+| `internal/plugins/external/` | Running external plugins over the JSON protocol |
+| `tests/e2e/` | Built-executable scenarios; integration tests live beside the package they exercise and use real temporary folders |
 
-`core/` must not import the CLI or read files itself. Inject the clock and effects, pass cancellation explicitly, and keep dependencies acyclic without a shared `utils` package. Each package documents ownership and invariants in `doc.go`.
+`core/` must not import the CLI or read files itself. Inject the clock and effects, pass cancellation explicitly, and keep dependencies acyclic without a shared `utils` package. Each package documents ownership and invariants in its package comment, in `doc.go` when it needs more than a paragraph.
 
 ### Tests
 

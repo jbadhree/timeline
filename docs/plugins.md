@@ -123,7 +123,8 @@ A plugin is a program that runs with your permissions, so `tline` runs a timelin
 - `tline plugins` shows each plugin, the program it runs, where that program is, and whether it is approved.
 - `tline plugins trust` approves them. In a terminal it asks first; anywhere else it needs `--yes`.
 - `tline plugins untrust` removes the approval.
-- Approval records the timeline's folder and a fingerprint of its plugin settings and of every plugin program inside the folder. If either changes, `tline` asks again. Programs found on your `PATH` are identified by name only, because they are installed tools rather than part of the timeline.
+- Approval records the timeline's folder and a fingerprint of its plugin settings and of every plugin program inside the folder. If either changes, `tline` asks again. Programs found on your `PATH` are identified by name only, because they are installed tools rather than part of the timeline. Only the program file itself is fingerprinted: files it reads or imports, such as Python modules beside it, are not, so review changes to them before you run `tline` after pulling someone else's changes.
+- The review shows each plugin's `run` setting exactly. If it contains control or other invisible characters, it is shown quoted with them escaped, so a timeline cannot hide part of what you approve.
 - Approvals are stored in your own configuration directory: `$TLINE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/tline`, else `~/.config/tline`. They are never stored in the timeline, so a timeline cannot approve itself.
 - Until approved, commands that need the plugins stop with **exit code 6** and say what to do. With `--json`, they also print `{"error": "plugins_not_approved", "root": ..., "changed": ..., "plugins": [...]}`.
 - In CI, where the repository is already your own code, set `TLINE_TRUST_PLUGINS=1` to skip approval.

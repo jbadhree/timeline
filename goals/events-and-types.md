@@ -14,6 +14,8 @@ status: achieved
 
 Anything worth remembering can be an event, so users must define their own types. Timeline has no built-in knowledge of investing, prediction scoring, or any particular agent. Plain Markdown with YAML metadata lets humans and agents add, read, and update events with any editor.
 
+Every event file and type folder lives in the root itself, so the files a person sees are the timeline: Timeline does not follow symbolic links, as decided in [no symbolic links](../decisions/no-symbolic-links.md).
+
 ## How
 
 - [Find the Timeline root from the nearest timeline.yaml or --root](../tasks/root-discovery.md)
@@ -35,7 +37,7 @@ Markdown and YAML are readable without Timeline, so nothing is locked in. Treati
 
 ### Root discovery
 
-A tracked `timeline.yaml` marks the Timeline root. By default, search the current directory and then its parents and use the nearest one. Report configuration errors rather than falling back to another root. Resolve configured folders relative to the root, resolve path arguments relative to the caller's working directory, and reject paths outside the configured folders. Only configured folders are scanned, so a root can share a repository with code and other files.
+A tracked `timeline.yaml` marks the Timeline root. By default, search the current directory and then its parents and use the nearest one. Report configuration errors rather than falling back to another root. Resolve configured folders relative to the root, resolve path arguments relative to the caller's working directory, and reject paths outside the configured folders and named files that are not event files, so a check never reports a file valid without reading it. Only configured folders are scanned, so a root can share a repository with code and other files.
 
 ```sh
 tline --root /path/to/my-project check
@@ -85,6 +87,8 @@ Each event is one Markdown file in its type's folder: YAML frontmatter, then a M
 | `entered_at` | Entry time: when the event was first recorded | `tline check` at first recording |
 | `entry_timing` | The type's timing rule when the event was first recorded | `tline check` at first recording |
 | `created_by` | Free-text label for the human or agent that added the event | Author |
+
+An event file is any `.md` file under a type's folder, at any depth, except hidden files and files in hidden folders. Symbolic links are not followed: a type folder that is a link, or not a directory, is an error rather than an empty folder, and a link inside a type folder, to a file or a folder, is reported as a problem in that path. A UTF-8 byte order mark before the frontmatter is ignored and kept. Sections are found by `## ` headings, without an optional closing run of `#` after a space, and headings inside fenced code blocks are ignored; a fence closes only with the same character, at least as many times, and no info string.
 
 `type`, `timeline_at`, and `created_by` are required. A draft omits `id`, `entered_at`, and `entry_timing`; see [recording](record-events.md). Field values keep their declared types, so `ticker: 123` is a number, not a string; quote it to make it text. Missing stays distinct from empty.
 

@@ -62,7 +62,7 @@ my-timeline/
   history/predictions/<event id>/versions.log
 ```
 
-- `history/` is at the root, outside every type folder, so copies are never read as events; no type folder may be `history` or inside it. It is not under `.tline/`, which holds only local runtime state: users keep `history/` with their timeline, for example by committing it, and never edit it.
+- `history/` is at the root, outside every type folder, so copies are never read as events; no type folder may be `history` or inside it, in any letter case, since most macOS disks ignore case. It is not under `.tline/`, which holds only local runtime state: users keep `history/` with their timeline, for example by committing it, and never edit it.
 - Each `vN.md` is a byte-for-byte copy of the event file when it was saved. Copies are never overwritten: a new version always gets the next number.
 - `versions.log` has one line per copy: `vN <saved at, UTC> <reason> <event path>`. Reasons are `recorded` (v1 saved when the draft was stamped), `changed` (a later version), `history-enabled` (v1 of an event recorded before its type kept history), and `late` (v1 saved by a later check, because the check that recorded the event stopped before saving it). A copy without a log line shows an unknown time.
 
@@ -83,7 +83,7 @@ During every check, including dry runs, a recorded event of a history type is co
 - each frozen section must have the same text as in v1, ignoring surrounding blank lines; a changed or removed section is reported with the start of v1's text;
 - `id`, `entered_at`, and `entry_timing` must equal v1's.
 
-A recorded file whose `id` has no copies, at a path whose history belongs to a different ID that no current file has, is reported as having a changed `id`.
+A recorded file whose `id` has no copies, at a path whose history belongs to a different ID that no current file has, is reported as having a changed `id`, unless it is a new event recorded at that path after the other event was removed: its `entered_at` is no earlier than the time that history's latest copy was saved, and differs from the other event's v1, which a changed `id` would keep. Its missing v1 is then saved as `late`.
 
 ### Moves and removals
 

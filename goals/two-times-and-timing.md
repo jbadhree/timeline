@@ -58,7 +58,7 @@ A draft is validated as if it were recorded now, so a Future draft whose date ha
 
 For a new event, A is the time the check records it, read from an injected clock after validation succeeds and immediately before writing; never the command's start time, a dry run, a file timestamp, or a value in draft YAML.
 
-`entry_timing` is written into the file at first recording so a reader of the file alone can see whether the event was entered after, before, or as it happened. It is written once, from the type's rule at that moment, and is the authoritative rule for the event from then on: if the type's rule in `timeline.yaml` changes later, the event keeps the rule it was entered under.
+`entry_timing` is written into the file at first recording so a reader of the file alone can see whether the event was entered after, before, or as it happened. It is written once, from the type's rule at that moment, and is the authoritative rule for the event from then on: if the type's rule in `timeline.yaml` changes later, the event keeps the rule it was entered under, and only new drafts follow the new rule. An event entered as `real_time` in a type that is no longer Real-time has no `max_delay` left to check, so only `A - E >= 0` still applies.
 
 ### IDs and timestamps
 
@@ -67,7 +67,7 @@ For a new event, A is the time the check records it, read from an injected clock
 
 ### Updates
 
-The timing rule describes an event when it is first entered and does not change as the clock moves: a prediction entered in advance remains one after its date passes. An update is checked against the event's original entry time and the rule in its `entry_timing` field. Its fields are validated against the current type definition, so types can gain fields over time. Unchanged events are never revalidated. Changing an event's type and restoring a removed event are not supported initially.
+The timing rule describes an event when it is first entered and does not change as the clock moves: a prediction entered in advance remains one after its date passes. An update is checked against the event's original entry time and the rule in its `entry_timing` field. Its fields are validated against the current type definition, so types can gain fields over time. Every check validates every event, changed or not, but always judges a recorded event's timing by its own `entered_at` and `entry_timing`, so an unchanged event never stops passing because the clock moved or its type's rule changed. Changing an event's type and restoring a removed event are not supported initially.
 
 ### Past due
 
