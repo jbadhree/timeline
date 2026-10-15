@@ -27,14 +27,14 @@ On macOS or Linux, install the newest release with:
 curl -fsSL https://raw.githubusercontent.com/jbadhree/timeline/main/install.sh | sh
 ```
 
-[The script](install.sh) downloads the archive for your OS and CPU from the [GitHub releases page](https://github.com/jbadhree/timeline/releases), checks it against `SHA256SUMS`, and installs `tline` into `~/.local/bin` without `sudo`. Set `TLINE_VERSION=v0.4.0` to choose a release, or `TLINE_INSTALL_DIR` to install elsewhere. It tells you if the folder is not on your `PATH`.
+[The script](install.sh) downloads the archive for your OS and CPU from the [GitHub releases page](https://github.com/jbadhree/timeline/releases), checks it against `SHA256SUMS`, and installs `tline` into `~/.local/bin` without `sudo`. Set `TLINE_VERSION=v0.5.0` to choose a release, or `TLINE_INSTALL_DIR` to install elsewhere. It tells you if the folder is not on your `PATH`.
 
 To install by hand instead, download the archive for your platform, check it against `SHA256SUMS`, and put `tline` on your `PATH`:
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
-tar -xzf tline_v0.4.0_darwin_arm64.tar.gz
-mv tline_v0.4.0_darwin_arm64/tline /usr/local/bin/
+tar -xzf tline_v0.5.0_darwin_arm64.tar.gz
+mv tline_v0.5.0_darwin_arm64/tline /usr/local/bin/
 ```
 
 The macOS binaries are not signed, so macOS blocks a downloaded copy at first. Allow it with `xattr -d com.apple.quarantine /usr/local/bin/tline`. With Go installed you can instead run `go install github.com/jbadhree/timeline/cmd/tline@latest`, which macOS does not block.
